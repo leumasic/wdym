@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# clangd compilation database, linked into the repository root by CMakeLists.txt
+compile_commands.json

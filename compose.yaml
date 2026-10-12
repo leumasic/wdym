@@ -1,0 +1,18 @@
+services:
+  pytorch:
+    build: .
+    container_name: pytorch_env
+    command: sleep infinity
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace:z
+      - ~/.config/nvim:/root/.config/nvim:ro,z
+      # Persist installed Mason LSPs/formatters across container restarts
+      - nvim_data:/root/.local/share/nvim
+    devices:
+      - "nvidia.com/gpu=all"
+    working_dir: /workspace
+
+volumes:
+  nvim_data:

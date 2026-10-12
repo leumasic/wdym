@@ -9,8 +9,10 @@ authors = [
 requires-python = ">=3.10"
 dependencies = []
 
-[project.scripts]
-wdym = "wdym:main"
+[dependency-groups]
+dev = [
+    "nanobind>=3.1.0",
+]
 
 [build-system]
 requires = ["scikit-build-core>=0.10", "nanobind>=3.1.0"]
