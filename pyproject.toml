@@ -1,0 +1,17 @@
+[project]
+name = "wdym"
+version = "0.1.0"
+description = "A toolkit to parse meaning"
+readme = "README.md"
+authors = [
+    { name = "leumasic", email = "53974949+leumasic@users.noreply.github.com" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+wdym = "wdym:main"
+
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=3.1.0"]
+build-backend = "scikit_build_core.build"
