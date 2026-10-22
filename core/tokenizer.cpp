@@ -1,4 +1,4 @@
-#include "tokenizer.h"
+#include <wdym/tokenizer.h>
 
 using wdym::ByteLevelBPETokenizer;
 

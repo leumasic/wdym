@@ -1,33 +1,21 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(wdym LANGUAGES CXX)
+project(wdym VERSION 0.1.0 LANGUAGES CXX)
 
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-set(DEV_MODULE Development.Module)
-find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-# Detect the installed nanobind package and import it into CMake
-execute_process(
-  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
-find_package(nanobind CONFIG REQUIRED)
+option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
 
-# Link compile_commands.json into the repository root, where clangd looks for it. CMake
-# writes the file after configuring, so the link may dangle until then. Where links can't
-# be made (Windows without developer mode), the copy-on-error fallback leaves nothing:
-# point clangd at build/ instead (--compile-commands-dir=build). Wheel builds (SKBUILD)
-# use a temporary build directory, so linking to it would leave a dead link behind.
+include(GNUInstallDirs)
+
+# Wheel builds (SKBUILD) use a temporary build directory, so linking to it
+# would leave a dead link behind.
 if(NOT SKBUILD AND NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   file(CREATE_LINK "${PROJECT_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json"
     SYMBOLIC RESULT link_result)
@@ -36,5 +24,43 @@ if(NOT SKBUILD AND NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   endif()
 endif()
 
-nanobind_add_module(wdym_ext ./core/wdymBinding.cpp ./core/tokenizer.cpp)
-install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
+add_library(wdym STATIC core/tokenizer.cpp)
+add_library(wdym::wdym ALIAS wdym)
+
+target_include_directories(wdym PUBLIC
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_compile_features(wdym PUBLIC cxx_std_23)
+set_target_properties(wdym PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+if (WDYM_BUILD_PYTHON)
+  find_package(Python 3.12 COMPONENTS Interpreter Development.Module REQUIRED
+    OPTIONAL_COMPONENTS Development.SABIModule)
+
+  # Detect the installed nanobind package and import it into CMake
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+    OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
+  find_package(nanobind CONFIG REQUIRED)
+
+  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI bindings/wdymBinding.cpp)
+  target_link_libraries(wdym_ext PRIVATE wdym::wdym)
+  install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
+endif()
+
+if (NOT SKBUILD)
+  include(CMakePackageConfigHelpers)
+
+  install(TARGETS wdym EXPORT wdymTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(EXPORT wdymTargets NAMESPACE wdym::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)
+
+  file(WRITE ${PROJECT_BINARY_DIR}/wdymConfig.cmake
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/wdymTargets.cmake\")\n")
+  write_basic_package_version_file(${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
+    COMPATIBILITY SameMinorVersion)
+  install(FILES ${PROJECT_BINARY_DIR}/wdymConfig.cmake ${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)
+endif()
