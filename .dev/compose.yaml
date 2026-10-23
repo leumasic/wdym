@@ -1,0 +1,24 @@
+name: wdym
+
+services:
+  pytorch:
+    build: .
+    container_name: pytorch_env
+    command: sleep infinity
+    stdin_open: true
+    tty: true
+    volumes:
+      - ..:/workspace:z
+      - ~/.config/nvim:/root/.config/nvim:ro,z
+      # Persist installed Mason LSPs/formatters across container restarts
+      - nvim_data:/root/.local/share/nvim
+      - uv_data:/root/.local/share/uv
+      - uv_cache:/root/.cache/uv
+    devices:
+      - "nvidia.com/gpu=all"
+    working_dir: /workspace
+
+volumes:
+  nvim_data:
+  uv_data:
+  uv_cache:
