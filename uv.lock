@@ -1,6 +1,6 @@
 version = 1
 revision = 5
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [[package]]
 name = "nanobind"
@@ -13,7 +13,6 @@ wheels = [
 
 [[package]]
 name = "wdym"
-version = "0.1.0"
 source = { editable = "." }
 
 [package.dev-dependencies]
