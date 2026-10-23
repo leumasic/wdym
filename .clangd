@@ -1,0 +1,6 @@
+# The library builds as C++23 and the tests as C++26
+CompileFlags:
+  Add: [-std=c++26]
+# To avoid std includes when already handled by import statement
+Completion:
+  HeaderInsertion: Never
