@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 4.5)
 
-project(wdym VERSION 0.1.0 LANGUAGES CXX)
+project(wdym
+  VERSION 0.1.0
+  HOMEPAGE_URL "https://github.com/leumasic/wdym"
+  LANGUAGES CXX
+)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -11,26 +15,36 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
+option(WDYM_BUILD_TESTS "Build the test suite" ${PROJECT_IS_TOP_LEVEL})
 
-include(GNUInstallDirs)
+include(FetchContent)
 
-# Wheel builds (SKBUILD) use a temporary build directory, so linking to it
-# would leave a dead link behind.
-if(NOT SKBUILD AND NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-  file(CREATE_LINK "${PROJECT_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json"
-    SYMBOLIC RESULT link_result)
-  if(NOT link_result EQUAL 0)
-    message(STATUS "Couldn't link compile_commands.json into the repository root (${link_result}); it's in ${PROJECT_BINARY_DIR}")
-  endif()
-endif()
+FetchContent_Declare(unordered_dense
+  GIT_REPOSITORY https://github.com/martinus/unordered_dense.git
+  GIT_TAG        v5.3.3
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(unordered_dense)
 
-add_library(wdym STATIC core/tokenizer.cpp)
+add_library(wdym STATIC
+  core/tokenizers/byte_level_bpe.cpp
+  core/tokenizers/bpe.cpp
+)
 add_library(wdym::wdym ALIAS wdym)
 
-target_include_directories(wdym PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_sources(wdym PUBLIC
+  FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
+    core/wdym.cppm
+    core/utils/containers.cppm
+    core/tokenizer.cppm
+    core/tokenizers/bpe.cppm
+    core/tokenizers/byte_level_bpe.cppm)
 target_compile_features(wdym PUBLIC cxx_std_23)
+target_compile_options(wdym PRIVATE -Wall -Wextra)
+# BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
+target_link_libraries(wdym PRIVATE $<BUILD_INTERFACE:unordered_dense::unordered_dense>)
 set_target_properties(wdym PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if (WDYM_BUILD_PYTHON)
@@ -43,19 +57,26 @@ if (WDYM_BUILD_PYTHON)
     OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
   find_package(nanobind CONFIG REQUIRED)
 
-  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI bindings/wdymBinding.cpp)
+  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/wdymBinding.cpp)
   target_link_libraries(wdym_ext PRIVATE wdym::wdym)
   install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
 endif()
 
+if (WDYM_BUILD_TESTS AND NOT SKBUILD)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
+
 if (NOT SKBUILD)
+  include(GNUInstallDirs)
   include(CMakePackageConfigHelpers)
 
   install(TARGETS wdym EXPORT wdymTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    FILE_SET CXX_MODULES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/wdym)
   install(EXPORT wdymTargets NAMESPACE wdym::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym
+    CXX_MODULES_DIRECTORY modules)
 
   file(WRITE ${PROJECT_BINARY_DIR}/wdymConfig.cmake
     "include(\"\${CMAKE_CURRENT_LIST_DIR}/wdymTargets.cmake\")\n")

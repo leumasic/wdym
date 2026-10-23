@@ -1,3 +1,5 @@
-# wdym
+# What Do You Mean (wdym)
 
-A toolkit to parse meaning
+wdym is a C++ library with Python bindings for extracting meaning from text corpora.
+
+## Getting Started
