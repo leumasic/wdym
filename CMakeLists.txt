@@ -14,17 +14,8 @@ option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
 
 include(GNUInstallDirs)
 
-# Wheel builds (SKBUILD) use a temporary build directory, so linking to it
-# would leave a dead link behind.
-if(NOT SKBUILD AND NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-  file(CREATE_LINK "${PROJECT_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json"
-    SYMBOLIC RESULT link_result)
-  if(NOT link_result EQUAL 0)
-    message(STATUS "Couldn't link compile_commands.json into the repository root (${link_result}); it's in ${PROJECT_BINARY_DIR}")
-  endif()
-endif()
-
-add_library(wdym STATIC core/tokenizer.cpp)
+add_library(wdym STATIC
+  core/tokenizers/byte_level_bpe.cpp)
 add_library(wdym::wdym ALIAS wdym)
 
 target_include_directories(wdym PUBLIC
