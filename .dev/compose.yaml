@@ -12,9 +12,13 @@ services:
       - ~/.config/nvim:/root/.config/nvim:ro,z
       # Persist installed Mason LSPs/formatters across container restarts
       - nvim_data:/root/.local/share/nvim
+      - uv_data:/root/.local/share/uv
+      - uv_cache:/root/.cache/uv
     devices:
       - "nvidia.com/gpu=all"
     working_dir: /workspace
 
 volumes:
   nvim_data:
+  uv_data:
+  uv_cache:
