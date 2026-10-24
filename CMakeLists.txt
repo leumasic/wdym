@@ -15,7 +15,9 @@ option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
 include(GNUInstallDirs)
 
 add_library(wdym STATIC
-  core/tokenizers/byte_level_bpe.cpp)
+  core/tokenizers/byte_level_bpe.cpp
+  core/tokenizers/bpe.cpp
+)
 add_library(wdym::wdym ALIAS wdym)
 
 target_include_directories(wdym PUBLIC

@@ -45,6 +45,7 @@ class TokenizerBase {
  private:
   static TextStream read_lines(std::span<const std::filesystem::path> files) {
     std::string line;
+
     for (const std::filesystem::path& path : files) {
       std::ifstream file(path, std::ios::binary);
       if (!file.is_open())
@@ -53,8 +54,10 @@ class TokenizerBase {
         );
 
       while (std::getline(file, line)) {
+        // add newline delimiter back for tokenizers who train with this added information
         if (!file.eof())
           line.push_back('\n');
+
         co_yield std::string_view(line);
       }
     }

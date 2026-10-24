@@ -18,9 +18,7 @@ class ByteLevelBPETokenizer
   static ByteLevelBPETokenizer from_file(const std::filesystem::path& path);
   void save(const std::filesystem::path& path) const;
 
-  // word -> id
   void encode();
-  // id -> word
   void decode();
 
   std::unordered_map<std::string, int> vocabulary;
