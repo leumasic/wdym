@@ -11,6 +11,7 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
+option(WDYM_BUILD_TESTS "Build the test suite" ${PROJECT_IS_TOP_LEVEL})
 
 include(GNUInstallDirs)
 
@@ -43,6 +44,11 @@ if (WDYM_BUILD_PYTHON)
   nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/wdymBinding.cpp)
   target_link_libraries(wdym_ext PRIVATE wdym::wdym)
   install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
+endif()
+
+if (WDYM_BUILD_TESTS AND NOT SKBUILD)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
 
 if (NOT SKBUILD)

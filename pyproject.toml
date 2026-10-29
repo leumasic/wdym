@@ -32,7 +32,7 @@ wheel.py-api = "cp312"
 # TODO: update min version to stable 4.5.0 version once it lands
 cmake.version = ">=4.5.0rc2"
 ninja.version = ">=1.11"
-sdist.exclude = [".dev/", ".github/", ".clang-format"]
+sdist.exclude = [".dev/", ".github/", ".clang-format", "tests/"]
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
