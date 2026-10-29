@@ -11,8 +11,6 @@ struct ByteLevelBPETrainOptions {
 class ByteLevelBPETokenizer
     : public TokenizerBase<ByteLevelBPETokenizer, ByteLevelBPETrainOptions> {
  public:
-  static ByteLevelBPETokenizer train_from_texts(TextStream texts, const TrainOptions& options);
-
   static ByteLevelBPETokenizer from_file(const std::filesystem::path& path);
   void save(const std::filesystem::path& path) const;
 
@@ -22,6 +20,10 @@ class ByteLevelBPETokenizer
   std::unordered_map<std::string, int> vocabulary;
 
  private:
+  friend TokenizerBase;
+
+  static ByteLevelBPETokenizer train_from_texts(TextStream texts, const TrainOptions& options);
+
   explicit ByteLevelBPETokenizer();
 };
 }  // namespace wdym

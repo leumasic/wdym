@@ -10,13 +10,7 @@ export namespace wdym {
 using TextStream = std::generator<std::string_view>;
 
 template <typename T>
-concept Tokenizer = requires(
-    const T& tokenizer,
-    TextStream texts,
-    const T::TrainOptions& options,
-    const std::filesystem::path& path
-) {
-  { T::train_from_texts(std::move(texts), options) } -> std::same_as<T>;
+concept Tokenizer = requires(const T& tokenizer, const std::filesystem::path& path) {
   { tokenizer.save(path) } -> std::same_as<void>;
 };
 
@@ -32,13 +26,42 @@ class TokenizerBase {
     return Derived::train_from_texts(std::move(texts), options);
   }
 
-  static Derived train(std::span<const std::filesystem::path> files, const Options& options = {}) {
-    // TODO: perhaps use multithreading to read files on multiple threads
-    return train(read_lines(files), options);
+  template <std::ranges::input_range Texts>
+    requires std::convertible_to<std::ranges::range_reference_t<Texts>, std::string_view>
+  static Derived train(Texts&& texts, const Options& options = {}) {
+    return train(streamTexts(texts), options);
+  }
+
+  static Derived train_from_files(const std::filesystem::path& file, const Options& options = {}) {
+    return train_from_files(std::span(&file, 1), options);
+  }
+
+  // Without this, train_from_files({"a.txt", "b.txt"}) would build a single path from the two
+  // pointers as an iterator range
+  static Derived train_from_files(
+      std::initializer_list<std::filesystem::path> files,
+      const Options& options = {}
+  ) {
+    return train(streamFileLines(files), options);
+  }
+
+  template <std::ranges::input_range Files>
+    requires std::convertible_to<std::ranges::range_reference_t<Files>, std::filesystem::path>
+             // a path is itself a range of path components
+             && (!std::same_as<std::remove_cvref_t<Files>, std::filesystem::path>)
+  static Derived train_from_files(Files&& files, const Options& options = {}) {
+    return train(streamFileLines(files), options);
   }
 
  private:
-  static TextStream read_lines(std::span<const std::filesystem::path> files) {
+  template <typename Texts>
+  static TextStream streamTexts(Texts& texts) {
+    for (auto&& text : texts)
+      co_yield std::string_view(text);
+  }
+
+  template <typename Files>
+  static TextStream streamFileLines(Files& files) {
     std::string line;
 
     for (const std::filesystem::path& path : files) {
@@ -59,7 +82,12 @@ class TokenizerBase {
   }
 
   TokenizerBase() {
-    static_assert(Tokenizer<Derived>, "tokenizers must implement the wdym::Tokenizer concept");
+    static_assert(Tokenizer<Derived>, "tokenizers must implement the Tokenizer concept");
+    static_assert(
+        requires(TextStream texts, const Options& options) {
+          { Derived::train_from_texts(std::move(texts), options) } -> std::same_as<Derived>;
+        }, "tokenizers must implement train_from_texts"
+    );
   };
   // Prevents inheritance mistakes like
   // class SomeTokenizer : public TokenizerBase<OtherTokenizer, SomeOptions>

@@ -24,5 +24,15 @@
         "outputOnFailure": true
       }
     }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "steps": [
+        { "type": "configure", "name": "dev" },
+        { "type": "build", "name": "dev" },
+        { "type": "test", "name": "dev" }
+      ]
+    }
   ]
 }

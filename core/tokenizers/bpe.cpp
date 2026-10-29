@@ -108,9 +108,9 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
     if (auto it = symbolToId.find(symbol); it != symbolToId.end())
       return static_cast<uint32_t>(it->second);
 
-    const auto id = static_cast<uint32_t>(tokenizer.idToSymbol.size());
+    const auto id = static_cast<uint32_t>(tokenizer.idToSymbol_.size());
 
-    tokenizer.idToSymbol.emplace_back(symbol);
+    tokenizer.idToSymbol_.emplace_back(symbol);
     symbolToId.emplace(symbol, id);
 
     return id;
@@ -164,7 +164,7 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
 
   // Perform merges
   while (!pairCountPriorityQueue.empty() &&
-         std::cmp_less(tokenizer.idToSymbol.size(), options.vocab_size)) {
+         std::cmp_less(tokenizer.idToSymbol_.size(), options.vocab_size)) {
     // 1. get pair with the highest count
     auto queuedPair = pairCountPriorityQueue.top();
     pairCountPriorityQueue.pop();
@@ -178,8 +178,8 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
     auto leftSymbolId = static_cast<uint32_t>(pairKey >> 32);
     auto rightSymbolId = static_cast<uint32_t>(pairKey);
 
-    auto leftSymbol = tokenizer.idToSymbol[leftSymbolId];
-    auto rightSymbol = tokenizer.idToSymbol[rightSymbolId];
+    auto leftSymbol = tokenizer.idToSymbol_[leftSymbolId];
+    auto rightSymbol = tokenizer.idToSymbol_[rightSymbolId];
 
     auto pairedSymbol = leftSymbol + rightSymbol;
     auto pairedSymbolId = setAndGetIdOfSymbol(pairedSymbol);
@@ -244,7 +244,7 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
     pairToWordIndices.erase(pairKey);
 
     // 3.5 add merge
-    tokenizer.merges.emplace_back(leftSymbolId, rightSymbolId);
+    tokenizer.merges_.emplace_back(leftSymbolId, rightSymbolId);
 
     // 3.6 add QueuedPair for each pair that has an updated count
     for (const auto pairKeyWithUpdatedCount : pairsWithUpdatedCounts)

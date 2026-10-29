@@ -1,2 +1,3 @@
+# The library builds as C++23 and the tests as C++26
 CompileFlags:
-  Add: [-std=c++23]
+  Add: [-std=c++26]

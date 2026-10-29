@@ -7,13 +7,12 @@ FetchContent_Declare(Catch2
   SYSTEM
 )
 
-# Build Catch2 with the same standard as the tests (scoped to this directory)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 FetchContent_MakeAvailable(Catch2)
 
-add_executable(wdym_tests
-  tokenizer_tests.cpp
-)
+file(GLOB test_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.test.cpp)
+
+add_executable(wdym_tests ${test_sources})
 target_link_libraries(wdym_tests PRIVATE wdym::wdym Catch2::Catch2WithMain)
 target_compile_options(wdym_tests PRIVATE -Wall -Wextra)
 
