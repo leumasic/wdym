@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/pytorch:26.01-py3
+FROM nvcr.io/nvidia/pytorch:26.09-py3
 
 RUN apt-get update && apt-get install -y software-properties-common \
     && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
@@ -33,8 +33,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # TODO: Move installation of cmake 4.5.0 to pyproject.toml once it gets published on pypi
 RUN curl -fL https://github.com/Kitware/CMake/releases/download/v4.5.0-rc2/cmake-4.5.0-rc2-linux-x86_64.tar.gz \
-    | tar -C /opt -xz \
-    && ln -s /opt/cmake-4.5.0-rc2-linux-x86_64/bin/* /usr/local/bin/
+    | tar -C /opt -xz
+
+ENV PATH="/opt/cmake-4.5.0-rc2-linux-x86_64/bin:${PATH}"
+
+ENV CLANGD_FLAGS=--experimental-modules-support
+COPY clangd.yaml /root/.config/clangd/config.yaml
 
 ENV VIRTUAL_ENV=/workspace/.venv
 ENV PATH="/workspace/.venv/bin:${PATH}"

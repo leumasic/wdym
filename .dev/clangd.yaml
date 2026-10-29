@@ -1,0 +1,6 @@
+# clangd builds `import std;` from libstdc++'s std.cc, which lives outside the repo.
+# Point it at the project's compilation database so it can find std.cc's compile command.
+If:
+  PathMatch: /usr/include/c\+\+/.*
+CompileFlags:
+  CompilationDatabase: /workspace/build
