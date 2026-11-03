@@ -70,7 +70,7 @@ class TokenizerBase {
         );
 
       while (std::getline(file, line)) {
-        // add newline delimiter back for tokenizers who train with this added information
+        // add newline delimiter back for tokenizers that train with this added information
         if (!file.eof())
           line.push_back('\n');
 

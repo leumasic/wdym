@@ -26,9 +26,10 @@ void splitWords(std::string_view text, OnWord&& onWord) {
 
   while (start != std::string_view::npos) {
     const auto end = text.find_first_of(WHITESPACE, start);
-    // end could evaluate to std::string_view::npos, but string sizes are no
-    // bigger than npos. Thus, the remaining word length text.size() - start is
-    // covered by npos - start:
+    // When there's no whitespace ahead, end evaluates to
+    // std::string_view::npos and we'd want the expression end - start below to
+    // cover the remainder of the string. And it does!
+    // The remaining word length text.size() - start is covered by npos - start:
     // text.size() <= npos = static_cast<size_t>(-1) \implies
     // text.size() - start <= npos - start
     const auto word = text.substr(start, end - start);
@@ -168,6 +169,14 @@ class BytePairEncodingTrainer {
     // This gives characters the same IDs no matter the order of words, lines or
     // input files, and consequently yields the same merges.
     std::set<std::string> alphabet;
+
+    if (settings_.use_byte_fallback)
+      for (int byte = 0; byte < 256; ++byte)
+        alphabet.insert(std::string(1, static_cast<char>(byte)));
+
+    if (!settings_.token_fallback.empty())
+      alphabet.insert(settings_.token_fallback);
+
     for (const auto& [word, _] : wordToCount)
       for (const auto symbol : splitWordSymbols(word, settings_, true))
         alphabet.insert(std::string(symbol));
