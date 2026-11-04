@@ -29,6 +29,7 @@ FetchContent_Declare(unordered_dense
 FetchContent_MakeAvailable(unordered_dense)
 
 add_library(wdym STATIC
+  core/normalization.cpp
   core/tokenizers/byte_level_bpe.cpp
   core/tokenizers/bpe.cpp
 )
@@ -38,6 +39,7 @@ target_sources(wdym PUBLIC
   FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
     core/wdym.cppm
     core/utils/containers.cppm
+    core/normalization.cppm
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
     core/tokenizers/byte_level_bpe.cppm)

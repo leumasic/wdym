@@ -6,10 +6,31 @@ export module wdym:bpe;
 
 import std.compat;
 import :containers;
+import :normalization;
 import :tokenizer;
+
+namespace wdym {
+struct PairMerge {
+  uint32_t rank;
+  uint32_t mergedSymbolId;
+};
+
+struct FrequentPairMerges {
+  static constexpr size_t SLOT_COUNT = 256;
+
+  std::vector<uint16_t> symbolIdToSlot;
+  std::vector<PairMerge> slotPairToMerge;
+};
+}  // namespace wdym
 
 export namespace wdym {
 struct BytePairEncodingSettings {
+  std::vector<std::string> markup_tokens = {};
+
+  NormalizationSettings normalization = {};
+
+  std::string word_delimiter = " ";
+
   // Prepended or adjoined to the start of each word
   std::string word_prefix = "▁";
   // Appended or adjoined to the end of each word
@@ -36,16 +57,54 @@ struct BytePairEncodingSettings {
 
 struct BytePairEncodingTrainOptions {
   int max_vocabulary_size = 8000;
-  BytePairEncodingSettings settings;
+  BytePairEncodingSettings settings = {};
 };
 
 class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncodingTrainOptions> {
  public:
+  class Cache {
+   public:
+    explicit Cache(size_t capacity = 32768);
+
+    void clear();
+
+   private:
+    friend BytePairEncoding;
+
+    static constexpr size_t MAX_WORD_SIZE = 13;
+    static constexpr size_t MAX_ID_COUNT = 4;
+
+    struct alignas(32) Entry {
+      uint8_t wordSize = 0;
+      uint8_t idCount = 0;
+      bool isRecent = false;
+      std::array<char, MAX_WORD_SIZE> word = {};
+      std::array<uint32_t, MAX_ID_COUNT> ids = {};
+    };
+
+    std::span<const uint32_t> find(std::string_view word, uint64_t hash);
+    void insert(std::string_view word, uint64_t hash, std::span<const uint32_t> ids);
+
+    std::vector<Entry> entries_;
+    uint64_t tokenizerId_ = 0;
+  };
+
   void save(const std::filesystem::path& path) const;
   static BytePairEncoding load(const std::filesystem::path& path);
 
   std::vector<uint32_t> encode(std::string_view text) const;
+  void encode(std::string_view text, std::vector<uint32_t>& ids) const;
+  void encode(std::string_view text, std::vector<uint32_t>& ids, Cache& cache) const;
+
+  std::string normalize(std::string_view text) const;
+
+  std::vector<uint32_t> encode_normalized(std::string_view text) const;
+  void encode_normalized(std::string_view text, std::vector<uint32_t>& ids) const;
+  void encode_normalized(std::string_view text, std::vector<uint32_t>& ids, Cache& cache) const;
+
   void decode() const;
+
+  std::optional<uint32_t> token_to_id(std::string_view token) const;
 
   bool operator==(const BytePairEncoding& other) const {
     return settings_ == other.settings_ && symbols_.values() == other.symbols_.values() &&
@@ -63,10 +122,9 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
       BytePairEncodingSettings settings,
       StringKeySet symbols,
       ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId
-  )
-      : settings_(std::move(settings)),
-        symbols_(std::move(symbols)),
-        pairKeyToMergedSymbolId_(std::move(pairKeyToMergedSymbolId)) {}
+  );
+
+  void encodeWords(std::string_view text, std::vector<uint32_t>& ids, Cache* cache) const;
 
   // NOTE: I'm really not a fan of pimpl. My general philosophy is that code shouldn't be contorted
   // for tests or builds
@@ -78,9 +136,15 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   // index in values()
   const StringKeySet symbols_;
 
-  // As for symbols_, this map's elements are stored contiguously in insertion
+  // As with symbols_, this map's elements are stored contiguously in insertion
   // order. The pair's index is supposed to denote its rank
   const ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId_;
+
+  const std::array<uint32_t, 128> asciiCharacterToSymbolId_;
+  const FrequentPairMerges frequentPairMerges_;
+  const StringKeyMap<uint32_t> wholeWordToSymbolId_;
+
+  const uint64_t instanceId_;
 };
 }  // namespace wdym
 
