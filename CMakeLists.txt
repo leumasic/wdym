@@ -28,7 +28,17 @@ FetchContent_Declare(unordered_dense
 )
 FetchContent_MakeAvailable(unordered_dense)
 
+FetchContent_Declare(darts_clone
+  GIT_REPOSITORY https://github.com/s-yata/darts-clone.git
+  GIT_TAG        v0.32h
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(darts_clone)
+
 add_library(wdym STATIC
+  core/normalization.cpp
   core/tokenizers/byte_level_bpe.cpp
   core/tokenizers/bpe.cpp
 )
@@ -38,6 +48,7 @@ target_sources(wdym PUBLIC
   FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
     core/wdym.cppm
     core/utils/containers.cppm
+    core/normalization.cppm
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
     core/tokenizers/byte_level_bpe.cppm)
@@ -45,6 +56,7 @@ target_compile_features(wdym PUBLIC cxx_std_23)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
 target_link_libraries(wdym PRIVATE $<BUILD_INTERFACE:unordered_dense::unordered_dense>)
+target_include_directories(wdym SYSTEM PRIVATE $<BUILD_INTERFACE:${darts_clone_SOURCE_DIR}/include>)
 set_target_properties(wdym PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if (WDYM_BUILD_PYTHON)
