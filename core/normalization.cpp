@@ -26,6 +26,11 @@ struct RuleMatch {
   std::string_view output;
 };
 
+bool isAsciiByte(char byte) {
+  // static_cast to prevent integral promotion and force zero extension instead
+  return static_cast<unsigned char>(byte) <= 0x7F;
+}
+
 // Well-formed UTF-8 byte sequences (Unicode Standard, Table 3-7):
 // https://www.unicode.org/versions/Unicode16.0.0/core-spec/chapter-3/#G27506
 //
@@ -41,7 +46,7 @@ struct RuleMatch {
 // U+100000..U+10FFFF    F4       80..8F   80..BF   80..BF
 Utf8Sequence readUtf8Sequence(std::string_view text) {
   const auto leadingByte = static_cast<unsigned char>(text[0]);
-  if (leadingByte <= 0x7F)
+  if (isAsciiByte(leadingByte))
     return {.length = 1, .isValid = true};
 
   size_t expectedLength = 0;
@@ -91,7 +96,7 @@ size_t skipAscii(std::string_view text, size_t position) {
     position += sizeof(chunk);
   }
 
-  while (position < text.size() && static_cast<unsigned char>(text[position]) < 0x80)
+  while (position < text.size() && isAsciiByte(text[position]))
     ++position;
 
   return position;
@@ -228,9 +233,7 @@ wdym::CompiledNormalizationStep compileNormalizationStep(const wdym::Normalizati
     ruleIndices.push_back(static_cast<int>(ruleIndex));
 
     compiledStep.isInputStartByte[static_cast<unsigned char>(rule.input.front())] = true;
-    const auto firstNonAsciiByte = std::ranges::find_if(rule.input, [](char byte) {
-      return static_cast<unsigned char>(byte) >= 0x80;
-    });
+    const auto firstNonAsciiByte = std::ranges::find_if_not(rule.input, isAsciiByte);
     if (firstNonAsciiByte == rule.input.end())
       compiledStep.hasAsciiOnlyInput = true;
     else
