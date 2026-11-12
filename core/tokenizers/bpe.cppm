@@ -9,8 +9,17 @@ import :containers;
 import :normalization;
 import :tokenizer;
 
+namespace wdym {
+struct TokenSource {
+  bool isMarkupToken = false;
+  uint32_t index = 0;
+};
+}  // namespace wdym
+
 export namespace wdym {
 struct ByteFallback {
+  std::string invalid_utf8_replacement = "�";
+
   bool operator==(const ByteFallback&) const = default;
 };
 
@@ -20,6 +29,14 @@ struct MarkupToken {
 
   bool operator==(const MarkupToken&) const = default;
 };
+
+using TextOrMarkupToken = std::variant<std::string, MarkupToken>;
+
+namespace literals {
+inline MarkupToken operator""_markup(const char* text, size_t size) {
+  return MarkupToken{std::string(text, size)};
+}
+}  // namespace literals
 
 struct BytePairEncodingSettings {
   std::vector<std::string> markup_tokens = {};
@@ -48,6 +65,15 @@ struct BytePairEncodingSettings {
 struct BytePairEncodingTrainOptions {
   int max_vocabulary_size = 8000;
   BytePairEncodingSettings settings = {};
+};
+
+struct BytePairEncodingDecodeOptions {
+  bool remove_leading_word_prefix = true;
+  bool remove_trailing_word_suffix = true;
+  // Replaces word suffix followed by word prefix, with word delimiter
+  bool restore_word_delimiters = true;
+
+  bool operator==(const BytePairEncodingDecodeOptions&) const = default;
 };
 
 class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncodingTrainOptions> {
@@ -111,7 +137,27 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   void encode_normalized(std::string_view text, std::vector<uint32_t>& ids) const;
   void encode_normalized(std::string_view text, std::vector<uint32_t>& ids, WordCache& cache) const;
 
-  void decode() const;
+  std::vector<uint32_t> encode_parts(std::span<const TextOrMarkupToken> parts) const;
+  void encode_parts(std::span<const TextOrMarkupToken> parts, std::vector<uint32_t>& ids) const;
+  void encode_parts(
+      std::span<const TextOrMarkupToken> parts,
+      std::vector<uint32_t>& ids,
+      WordCache& cache
+  ) const;
+
+  std::string decode(
+      std::span<const uint32_t> ids,
+      const BytePairEncodingDecodeOptions& options = {}
+  ) const;
+  void decode(
+      std::span<const uint32_t> ids,
+      std::string& text,
+      const BytePairEncodingDecodeOptions& options = {}
+  ) const;
+  std::vector<TextOrMarkupToken> decode_parts(
+      std::span<const uint32_t> ids,
+      const BytePairEncodingDecodeOptions& options = {}
+  ) const;
 
   std::optional<uint32_t> token_to_id(std::string_view token) const;
   std::optional<uint32_t> markup_token_to_id(std::string_view token) const;
@@ -137,8 +183,20 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   );
 
   void encodeWords(std::string_view text, std::vector<uint32_t>& ids, WordCache* cache) const;
+  void encodeParts(
+      std::span<const TextOrMarkupToken> parts,
+      std::vector<uint32_t>& ids,
+      WordCache* cache
+  ) const;
 
-  std::optional<uint32_t> findTokenFallbackId() const;
+  std::string decodeSymbolText(
+      std::string_view symbolText,
+      bool removeLeadingWordPrefix,
+      bool removeTrailingWordSuffix,
+      bool restoreWordDelimiters
+  ) const;
+
+  std::optional<uint32_t> findFallbackTokenId() const;
 
   // NOTE: I'm really not a fan of pimpl. My general philosophy is that code shouldn't be contorted
   // for tests or builds
@@ -146,15 +204,22 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   const BytePairEncodingSettings settings_;
 
   // Serves as a bidirectional map between symbols and IDs. unordered_dense
-  // stores elements contiguously in insertion order, so a symbol's ID is its
-  // index in values()
+  // stores elements in insertion order, so a symbol's ID is its index in
+  // values(). We can use that id (index) to look into symbolIdToTokenId_
   const StringKeySet symbols_;
 
   // As with symbols_, this map's elements are stored contiguously in insertion
   // order. The pair's index is supposed to denote its rank
   const ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId_;
 
+  // TODO: maybe move to base tokenizer class, along with public normalize method
   const Normalizer normalizer_;
+  const StringKeyMap<uint32_t> markupTokenToTokenId_;
+  const std::vector<uint32_t> symbolIdToTokenId_;
+
+  // For decoding
+  const std::vector<TokenSource> tokenIdToTokenSource_;
+
   const StringKeyMap<uint32_t> wordToWholeWordSymbolId_;
 };
 }  // namespace wdym

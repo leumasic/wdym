@@ -7,6 +7,7 @@ module wdym;
 import std.compat;
 import :containers;
 import :normalization;
+import :utf8;
 
 using wdym::BytePairEncoding;
 using wdym::StringKeyMap;
@@ -194,6 +195,16 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
       stringFallback != nullptr && stringFallback->empty())
     throw std::invalid_argument("unknown_character_fallback is an empty token");
 
+  if (const auto* byteFallback =
+          std::get_if<wdym::ByteFallback>(&settings.unknown_character_fallback);
+      byteFallback != nullptr && !wdym::isValidUtf8(byteFallback->invalid_utf8_replacement))
+    throw std::invalid_argument(
+        std::format(
+            "unknown_character_fallback's invalid_utf8_replacement {:?} is not valid UTF-8",
+            byteFallback->invalid_utf8_replacement
+        )
+    );
+
   for (const std::string_view markupToken : settings.markup_tokens)
     if (markupToken.empty())
       throw std::invalid_argument("markup_tokens contains an empty token");
@@ -215,36 +226,40 @@ class BytePairEncodingWordEncoder {
       const wdym::BytePairEncodingSettings& settings,
       const StringKeySet& symbols,
       const unordered_dense::map<uint64_t, uint32_t>& pairKeyToMergedSymbolId,
-      std::optional<uint32_t> tokenFallbackId
+      const std::vector<uint32_t>& symbolIdToTokenId,
+      std::optional<uint32_t> fallbackTokenId
   )
       : settings_(settings),
         symbols_(symbols),
         pairKeyToMergedSymbolId_(pairKeyToMergedSymbolId),
-        tokenFallbackId_(tokenFallbackId) {}
+        symbolIdToTokenId_(symbolIdToTokenId),
+        fallbackTokenId_(fallbackTokenId) {}
 
   void encode(std::string_view word, std::vector<uint32_t>& ids) {
     encodedSymbolIds_.clear();
+
     splitWordSymbols(word, settings_, [this](std::string_view symbol) {
       // TODO: be mindful of case where prefix + character is unknown but
       // character by itself is known
       if (const auto symbolId = findSymbolId(symbols_, symbol))
         encodedSymbolIds_.push_back(*symbolId);
-      else
-        appendFallbackIds(symbol);
+      else if (std::holds_alternative<wdym::ByteFallback>(settings_.unknown_character_fallback))
+        for (const char byte : symbol)
+          encodedSymbolIds_.push_back(*findSymbolId(symbols_, std::string_view(&byte, 1)));
+      else if (fallbackTokenId_.has_value())
+        encodedSymbolIds_.push_back(UNKNOWN_CHARACTER_SYMBOL_ID);
     });
-    // TODO: weird method...
+
+    // TODO: weird no-arg method...
     mergeSymbolIds();
-    ids.append_range(encodedSymbolIds_);
+    for (const auto symbolId : encodedSymbolIds_)
+      ids.push_back(
+          symbolId == UNKNOWN_CHARACTER_SYMBOL_ID ? *fallbackTokenId_ : symbolIdToTokenId_[symbolId]
+      );
   }
 
  private:
-  void appendFallbackIds(std::string_view symbol) {
-    if (std::holds_alternative<wdym::ByteFallback>(settings_.unknown_character_fallback))
-      for (const char byte : symbol)
-        encodedSymbolIds_.push_back(*findSymbolId(symbols_, std::string_view(&byte, 1)));
-    else if (tokenFallbackId_.has_value())
-      encodedSymbolIds_.push_back(*tokenFallbackId_);
-  }
+  static constexpr uint32_t UNKNOWN_CHARACTER_SYMBOL_ID = std::numeric_limits<uint32_t>::max();
 
   void mergeSymbolIds() {
     adjacentPairMerges_.clear();
@@ -291,7 +306,8 @@ class BytePairEncodingWordEncoder {
   const wdym::BytePairEncodingSettings& settings_;
   const StringKeySet& symbols_;
   const unordered_dense::map<uint64_t, uint32_t>& pairKeyToMergedSymbolId_;
-  const std::optional<uint32_t> tokenFallbackId_;
+  const std::vector<uint32_t>& symbolIdToTokenId_;
+  const std::optional<uint32_t> fallbackTokenId_;
 
   std::vector<uint32_t> encodedSymbolIds_;
   std::vector<PairMerge> adjacentPairMerges_;
@@ -317,6 +333,48 @@ StringKeyMap<uint32_t> buildWordToWholeWordSymbolId(
   }
 
   return wordToWholeWordSymbolId;
+}
+
+StringKeyMap<uint32_t> buildMarkupTokenToTokenId(
+    const wdym::BytePairEncodingSettings& settings,
+    const StringKeySet& symbols
+) {
+  StringKeyMap<uint32_t> markupTokenToTokenId;
+
+  for (const std::string_view markupToken : settings.markup_tokens)
+    markupTokenToTokenId.emplace(
+        markupToken, static_cast<uint32_t>(symbols.size() + markupTokenToTokenId.size())
+    );
+
+  return markupTokenToTokenId;
+}
+
+std::vector<uint32_t> buildSymbolIdToTokenId(const StringKeySet& symbols) {
+  std::vector<uint32_t> symbolIdToTokenId(symbols.size());
+
+  for (uint32_t symbolId = 0; symbolId < symbols.size(); ++symbolId)
+    symbolIdToTokenId[symbolId] = symbolId;
+
+  return symbolIdToTokenId;
+}
+
+std::vector<wdym::TokenSource> buildTokenIdToTokenSource(
+    const StringKeySet& symbols,
+    const std::vector<uint32_t>& symbolIdToTokenId,
+    const StringKeyMap<uint32_t>& markupTokenToTokenId
+) {
+  std::vector<wdym::TokenSource> tokenIdToTokenSource(symbols.size() + markupTokenToTokenId.size());
+
+  for (uint32_t symbolId = 0; symbolId < symbols.size(); ++symbolId)
+    tokenIdToTokenSource[symbolIdToTokenId[symbolId]] = {.isMarkupToken = false, .index = symbolId};
+
+  for (uint32_t markupIndex = 0; markupIndex < markupTokenToTokenId.size(); ++markupIndex)
+    tokenIdToTokenSource[markupTokenToTokenId.values()[markupIndex].second] = {
+        .isMarkupToken = true,
+        .index = markupIndex,
+    };
+
+  return tokenIdToTokenSource;
 }
 
 class BytePairEncodingTrainer {
@@ -497,6 +555,11 @@ BytePairEncoding::BytePairEncoding(
       symbols_(std::move(symbols)),
       pairKeyToMergedSymbolId_(std::move(pairKeyToMergedSymbolId)),
       normalizer_(settings_.normalization),
+      markupTokenToTokenId_(buildMarkupTokenToTokenId(settings_, symbols_)),
+      symbolIdToTokenId_(buildSymbolIdToTokenId(symbols_)),
+      tokenIdToTokenSource_(
+          buildTokenIdToTokenSource(symbols_, symbolIdToTokenId_, markupTokenToTokenId_)
+      ),
       wordToWholeWordSymbolId_(buildWordToWholeWordSymbolId(settings_, symbols_)) {}
 
 std::span<const uint32_t> BytePairEncoding::WordCache::find(std::string_view word, uint64_t hash) {
@@ -643,7 +706,7 @@ void BytePairEncoding::encodeWords(
     WordCache* cache
 ) const {
   BytePairEncodingWordEncoder wordEncoder(
-      settings_, symbols_, pairKeyToMergedSymbolId_, findTokenFallbackId()
+      settings_, symbols_, pairKeyToMergedSymbolId_, symbolIdToTokenId_, findFallbackTokenId()
   );
 
   splitWords(text, settings_.word_delimiter, [&](std::string_view word) {
@@ -651,7 +714,7 @@ void BytePairEncoding::encodeWords(
 
     if (const auto it = wordToWholeWordSymbolId_.find(word, wordHash);
         it != wordToWholeWordSymbolId_.end()) {
-      ids.push_back(it->second);
+      ids.push_back(symbolIdToTokenId_[it->second]);
       return;
     }
 
@@ -671,20 +734,162 @@ void BytePairEncoding::encodeWords(
   });
 }
 
+std::vector<uint32_t> BytePairEncoding::encode_parts(
+    std::span<const TextOrMarkupToken> parts
+) const {
+  std::vector<uint32_t> ids;
+  encode_parts(parts, ids);
+  return ids;
+}
+
+void BytePairEncoding::encode_parts(
+    std::span<const TextOrMarkupToken> parts,
+    std::vector<uint32_t>& ids
+) const {
+  encodeParts(parts, ids, nullptr);
+}
+
+void BytePairEncoding::encode_parts(
+    std::span<const TextOrMarkupToken> parts,
+    std::vector<uint32_t>& ids,
+    WordCache& cache
+) const {
+  encodeParts(parts, ids, &cache);
+}
+
+void BytePairEncoding::encodeParts(
+    std::span<const TextOrMarkupToken> parts,
+    std::vector<uint32_t>& ids,
+    WordCache* cache
+) const {
+  for (const TextOrMarkupToken& part : parts) {
+    if (const auto* markupToken = std::get_if<MarkupToken>(&part)) {
+      const auto tokenId = markup_token_to_id(markupToken->text);
+      if (!tokenId.has_value())
+        throw std::invalid_argument(
+            std::format("{:?} is not one of the tokenizer's markup tokens", markupToken->text)
+        );
+
+      ids.push_back(*tokenId);
+    } else if (cache != nullptr) {
+      encode(std::get<std::string>(part), ids, *cache);
+    } else {
+      encode(std::get<std::string>(part), ids);
+    }
+  }
+}
+
+std::string BytePairEncoding::decode(
+    std::span<const uint32_t> ids,
+    const BytePairEncodingDecodeOptions& options
+) const {
+  std::string text;
+  decode(ids, text, options);
+  return text;
+}
+
+void BytePairEncoding::decode(
+    std::span<const uint32_t> ids,
+    std::string& text,
+    const BytePairEncodingDecodeOptions& options
+) const {
+  for (const TextOrMarkupToken& part : decode_parts(ids, options)) {
+    if (const auto* markupToken = std::get_if<MarkupToken>(&part))
+      text.append(markupToken->text);
+    else
+      text.append(std::get<std::string>(part));
+  }
+}
+
+std::vector<wdym::TextOrMarkupToken> BytePairEncoding::decode_parts(
+    std::span<const uint32_t> ids,
+    const BytePairEncodingDecodeOptions& options
+) const {
+  std::vector<TextOrMarkupToken> parts;
+  std::string symbolText;
+
+  const auto appendTextPart = [&](bool removeTrailingWordSuffix) {
+    if (symbolText.empty())
+      return;
+
+    const bool removeLeadingWordPrefix = parts.empty() && options.remove_leading_word_prefix;
+    std::string text = decodeSymbolText(
+        symbolText,
+        removeLeadingWordPrefix,
+        removeTrailingWordSuffix,
+        options.restore_word_delimiters
+    );
+    if (!text.empty())
+      parts.emplace_back(std::move(text));
+
+    symbolText.clear();
+  };
+
+  for (const uint32_t tokenId : ids) {
+    const auto& token = tokenIdToTokenSource_.at(tokenId);
+
+    if (token.isMarkupToken) {
+      appendTextPart(false);
+      parts.emplace_back(MarkupToken{markupTokenToTokenId_.values()[token.index].first});
+    } else {
+      symbolText.append(symbols_.values()[token.index]);
+    }
+  }
+
+  appendTextPart(options.remove_trailing_word_suffix);
+  return parts;
+}
+
+std::string BytePairEncoding::decodeSymbolText(
+    std::string_view symbolText,
+    bool removeLeadingWordPrefix,
+    bool removeTrailingWordSuffix,
+    bool restoreWordDelimiters
+) const {
+  if (removeLeadingWordPrefix && symbolText.starts_with(settings_.word_prefix))
+    symbolText.remove_prefix(settings_.word_prefix.size());
+
+  if (removeTrailingWordSuffix && symbolText.ends_with(settings_.word_suffix))
+    symbolText.remove_suffix(settings_.word_suffix.size());
+
+  std::string text;
+  const std::string wordSuffixAndPrefix = settings_.word_suffix + settings_.word_prefix;
+
+  if (restoreWordDelimiters && !wordSuffixAndPrefix.empty())
+    text.append_range(
+        symbolText |
+        std::views::split(std::string_view(wordSuffixAndPrefix)) |
+        std::views::join_with(std::string_view(settings_.word_delimiter))
+    );
+  else
+    text = symbolText;
+
+  if (const auto* byteFallback = std::get_if<ByteFallback>(&settings_.unknown_character_fallback)) {
+    std::string replacedText;
+    if (replaceInvalidUtf8(text, byteFallback->invalid_utf8_replacement, replacedText))
+      text = std::move(replacedText);
+  }
+
+  return text;
+}
+
 std::optional<uint32_t> BytePairEncoding::token_to_id(std::string_view token) const {
-  return findSymbolId(symbols_, token);
+  if (const auto symbolId = findSymbolId(symbols_, token))
+    return symbolIdToTokenId_[*symbolId];
+
+  return std::nullopt;
 }
 
 std::optional<uint32_t> BytePairEncoding::markup_token_to_id(std::string_view token) const {
-  const auto it = std::ranges::find(settings_.markup_tokens, token);
-  if (it == settings_.markup_tokens.end())
+  const auto it = markupTokenToTokenId_.find(token);
+  if (it == markupTokenToTokenId_.end())
     return std::nullopt;
 
-  return static_cast<uint32_t>(symbols_.size() + (it - settings_.markup_tokens.begin()));
+  return it->second;
 }
 
 // TODO: consider renaming to findFallbackTokenId
-std::optional<uint32_t> BytePairEncoding::findTokenFallbackId() const {
+std::optional<uint32_t> BytePairEncoding::findFallbackTokenId() const {
   if (const auto* markupFallback = std::get_if<MarkupToken>(&settings_.unknown_character_fallback))
     return markup_token_to_id(markupFallback->text);
 
