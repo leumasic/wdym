@@ -33,7 +33,7 @@ void splitWords(std::string_view text, std::string_view delimiter, OnWord&& onWo
       onWord(std::string_view(word));
 }
 
-// OPTIMIZATION: make use of multithreading
+// TODO: make use of multithreading
 StringKeyMap<uint64_t> getWordToCount(
     wdym::TextStream texts,
     const wdym::BytePairEncodingSettings& settings
@@ -473,7 +473,7 @@ class BytePairEncodingTrainer {
       auto& oldPairCount = pairToCount_.at(oldPairKey);
       oldPairCount -= parentWordCount;
 
-      // Memory optimization. Training works without it
+      // MEMORY OPTIMIZATION: Training works without it
       if (oldPairCount == 0)
         pairToCount_.erase(oldPairKey);
 
@@ -624,7 +624,7 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
 
   BytePairEncodingTrainer trainer(settings);
 
-  // separate scope to free up wordToCount once done with it
+  // MEMORY OPTIMIZATION: separate scope to free up wordToCount once done with it
   {
     auto wordToCount = getWordToCount(std::move(texts), settings);
 
