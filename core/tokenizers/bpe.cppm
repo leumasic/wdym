@@ -131,8 +131,6 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   void encode(std::string_view text, std::vector<uint32_t>& ids) const;
   void encode(std::string_view text, std::vector<uint32_t>& ids, WordCache& cache) const;
 
-  std::string normalize(std::string_view text) const;
-
   std::vector<uint32_t> encode_normalized(std::string_view text) const;
   void encode_normalized(std::string_view text, std::vector<uint32_t>& ids) const;
   void encode_normalized(std::string_view text, std::vector<uint32_t>& ids, WordCache& cache) const;
@@ -212,8 +210,6 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   // order. The pair's index is supposed to denote its rank
   const ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId_;
 
-  // TODO: maybe move to base tokenizer class, along with public normalize method
-  const Normalizer normalizer_;
   const StringKeyMap<uint32_t> markupTokenToTokenId_;
   const std::vector<uint32_t> symbolIdToTokenId_;
 

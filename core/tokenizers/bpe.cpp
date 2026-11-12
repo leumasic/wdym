@@ -180,6 +180,9 @@ PairMerge getPairMerge(
 wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettings settings) {
   wdym::validateNormalizationSettings(settings.normalization);
 
+  if (std::holds_alternative<wdym::KeepInvalidUtf8>(settings.normalization.invalid_utf8_fallback))
+    throw std::invalid_argument("normalization for BytePairEncoding cannot keep invalid UTF-8");
+
   if (const auto* markupFallback =
           std::get_if<wdym::MarkupToken>(&settings.unknown_character_fallback);
       markupFallback != nullptr &&
@@ -551,10 +554,10 @@ BytePairEncoding::BytePairEncoding(
     StringKeySet symbols,
     unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId
 )
-    : settings_(std::move(settings)),
+    : TokenizerBase(settings.normalization),
+      settings_(std::move(settings)),
       symbols_(std::move(symbols)),
       pairKeyToMergedSymbolId_(std::move(pairKeyToMergedSymbolId)),
-      normalizer_(settings_.normalization),
       markupTokenToTokenId_(buildMarkupTokenToTokenId(settings_, symbols_)),
       symbolIdToTokenId_(buildSymbolIdToTokenId(symbols_)),
       tokenIdToTokenSource_(
@@ -675,11 +678,6 @@ void BytePairEncoding::encode(
 ) const {
   std::string normalizationBuffer;
   encodeWords(normalizer_.normalize(text, normalizationBuffer), ids, &cache);
-}
-
-std::string BytePairEncoding::normalize(std::string_view text) const {
-  std::string normalizationBuffer;
-  return std::string(normalizer_.normalize(text, normalizationBuffer));
 }
 
 std::vector<uint32_t> BytePairEncoding::encode_normalized(std::string_view text) const {

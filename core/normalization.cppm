@@ -17,8 +17,12 @@ struct NormalizationStep {
   bool operator==(const NormalizationStep&) const = default;
 };
 
+struct KeepInvalidUtf8 {
+  bool operator==(const KeepInvalidUtf8&) const = default;
+};
+
 struct NormalizationSettings {
-  std::string invalid_utf8_replacement = "�";
+  std::variant<std::string, KeepInvalidUtf8> invalid_utf8_fallback = "�";
   std::vector<NormalizationStep> steps = {};
 
   bool operator==(const NormalizationSettings&) const = default;
@@ -46,7 +50,7 @@ class Normalizer {
   std::string_view normalize(std::string_view text, std::string& buffer) const;
 
  private:
-  const std::string invalidUtf8Replacement_;
+  const std::variant<std::string, KeepInvalidUtf8> invalidUtf8Fallback_;
   const std::vector<CompiledNormalizationStep> steps_;
 };
 

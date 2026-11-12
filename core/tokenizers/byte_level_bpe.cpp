@@ -4,7 +4,7 @@ import std;
 
 using wdym::ByteLevelBPETokenizer;
 
-ByteLevelBPETokenizer::ByteLevelBPETokenizer() {}
+ByteLevelBPETokenizer::ByteLevelBPETokenizer() : TokenizerBase(NormalizationSettings{}) {}
 
 ByteLevelBPETokenizer ByteLevelBPETokenizer::train_from_texts(
     TextStream texts,

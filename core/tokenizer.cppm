@@ -6,6 +6,7 @@ module;
 export module wdym:tokenizer;
 
 import std;
+import :normalization;
 
 export namespace wdym {
 using TextStream = std::generator<std::string_view>;
@@ -51,6 +52,14 @@ class TokenizerBase {
     return train(streamFileLines(files), options);
   }
 
+  std::string normalize(std::string_view text) const {
+    std::string normalizationBuffer;
+    return std::string(normalizer_.normalize(text, normalizationBuffer));
+  }
+
+ protected:
+  const Normalizer normalizer_;
+
  private:
   template <typename Texts>
   static TextStream streamTexts(Texts& texts) {
@@ -79,7 +88,8 @@ class TokenizerBase {
     }
   }
 
-  TokenizerBase() {
+  explicit TokenizerBase(const NormalizationSettings& normalizationSettings)
+      : normalizer_(normalizationSettings) {
     static_assert(Tokenizer<Derived>, "tokenizers must implement the Tokenizer concept");
     static_assert(
         requires(TextStream texts, const Options& options) {

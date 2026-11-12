@@ -120,12 +120,15 @@ std::vector<wdym::CompiledNormalizationStep> compileNormalizationSteps(
 }  // namespace
 
 wdym::Normalizer::Normalizer(const NormalizationSettings& settings)
-    : invalidUtf8Replacement_(settings.invalid_utf8_replacement),
+    : invalidUtf8Fallback_(settings.invalid_utf8_fallback),
       steps_(compileNormalizationSteps(settings.steps)) {}
 
 std::string_view wdym::Normalizer::normalize(std::string_view text, std::string& buffer) const {
+  const auto* invalidUtf8Replacement = std::get_if<std::string>(&invalidUtf8Fallback_);
   std::string_view normalizedText =
-      replaceInvalidUtf8(text, invalidUtf8Replacement_, buffer) ? std::string_view(buffer) : text;
+      invalidUtf8Replacement != nullptr && replaceInvalidUtf8(text, *invalidUtf8Replacement, buffer)
+          ? std::string_view(buffer)
+          : text;
   std::string stepOutputBuffer;
 
   for (const CompiledNormalizationStep& step : steps_) {
@@ -140,11 +143,11 @@ std::string_view wdym::Normalizer::normalize(std::string_view text, std::string&
 }
 
 void wdym::validateNormalizationSettings(const NormalizationSettings& settings) {
-  if (!isValidUtf8(settings.invalid_utf8_replacement))
+  if (const auto* invalidUtf8Replacement =
+          std::get_if<std::string>(&settings.invalid_utf8_fallback);
+      invalidUtf8Replacement != nullptr && !isValidUtf8(*invalidUtf8Replacement))
     throw std::invalid_argument(
-        std::format(
-            "invalid_utf8_replacement {:?} is not valid UTF-8", settings.invalid_utf8_replacement
-        )
+        std::format("invalid_utf8_fallback {:?} is not valid UTF-8", *invalidUtf8Replacement)
     );
 
   for (size_t stepIndex = 0; stepIndex < settings.steps.size(); ++stepIndex) {
