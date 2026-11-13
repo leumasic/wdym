@@ -1,0 +1,14 @@
+namespace wdym.schema;
+
+table NormalizationStep {
+  name: string;
+  trie_units: [uint32];
+  outputs: string;
+  output_offsets: [uint32];
+}
+
+table Normalization {
+  /// Present means replacing invalid utf8. Absent means keeping invalid utf8.
+  invalid_utf8_replacement: string;
+  steps: [NormalizationStep];
+}

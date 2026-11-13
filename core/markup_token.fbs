@@ -1,0 +1,6 @@
+namespace wdym.schema;
+
+table MarkupToken {
+  text: string;
+  token_id: uint32;
+}

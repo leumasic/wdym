@@ -1,0 +1,46 @@
+include "markup_token.fbs";
+
+namespace wdym.schema;
+
+table ByteFallback {
+  invalid_utf8_replacement: string;
+}
+
+union UnknownCharacterFallback {
+  ByteFallback,
+  SymbolFallback: string,
+  MarkupTokenFallback: string
+}
+
+table BytePairEncodingSettings {
+  word_delimiter: string;
+  word_prefix: string;
+  word_suffix: string;
+  adjoin_prefix: bool;
+  adjoin_suffix: bool;
+  unknown_character_fallback: UnknownCharacterFallback;
+}
+
+struct Merge {
+  left_symbol_id: uint32;
+  right_symbol_id: uint32;
+  merged_symbol_id: uint32;
+}
+
+table BytePairEncoding {
+  settings: BytePairEncodingSettings;
+
+  // Every symbol's bytes, joined end to end in symbol ID order
+  symbol_bytes: [ubyte];
+
+  // Where each symbol starts in symbol_bytes. Symbol i spans symbol_offsets[i]
+  // up to symbol_offsets[i + 1]
+  symbol_offsets: [uint32];
+
+  merges: [Merge];
+  symbol_id_to_token_id: [uint32];
+
+  // Stored here instead of (redundantly) in BytePairEncodingSettings because
+  // token ids tied to the tokenizer only come after building it
+  markup_tokens: [MarkupToken];
+}
