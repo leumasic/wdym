@@ -64,6 +64,4 @@ class Normalizer {
   const InvalidUtf8Fallback invalidUtf8Fallback;
   const std::vector<CompiledNormalizationStep> steps;
 };
-
-void validateNormalizationSettings(const NormalizationSettings& settings);
 }  // namespace wdym

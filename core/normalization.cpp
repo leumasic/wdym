@@ -113,8 +113,50 @@ std::vector<wdym::CompiledNormalizationStep> compileNormalizationSteps(
   std::vector<wdym::CompiledNormalizationStep> compiledSteps;
   compiledSteps.reserve(steps.size());
 
-  for (const wdym::NormalizationStep& step : steps)
+  for (size_t stepIndex = 0; stepIndex < steps.size(); ++stepIndex) {
+    const wdym::NormalizationStep& step = steps[stepIndex];
+
+    const std::string stepDescription =
+        step.name.empty() ? std::format("normalization step {}", stepIndex)
+                          : std::format("normalization step {} ({:?})", stepIndex, step.name);
+
+    std::unordered_set<std::string_view> inputs;
+
+    for (const auto& rule : step.rules) {
+      if (rule.input.empty())
+        throw std::invalid_argument(
+            std::format("{} has a rule with an empty input", stepDescription)
+        );
+
+      if (rule.input.contains('\0'))
+        throw std::invalid_argument(
+            std::format(
+                "{} has a rule input {:?} that contains disallowed U+0000",
+                stepDescription,
+                rule.input
+            )
+        );
+
+      if (!wdym::isValidUtf8(rule.input))
+        throw std::invalid_argument(
+            std::format(
+                "{} has a rule input {:?} that is not valid UTF-8", stepDescription, rule.input
+            )
+        );
+
+      if (rule.input == rule.output)
+        throw std::invalid_argument(
+            std::format("{} has a rule that maps {:?} to itself", stepDescription, rule.input)
+        );
+
+      if (!inputs.insert(rule.input).second)
+        throw std::invalid_argument(
+            std::format("{} has more than one rule with input {:?}", stepDescription, rule.input)
+        );
+    }
+
     compiledSteps.push_back(compileNormalizationStep(step));
+  }
 
   return compiledSteps;
 }
@@ -127,7 +169,52 @@ wdym::Normalizer::Normalizer(
     std::vector<CompiledNormalizationStep> compiledSteps,
     InvalidUtf8Fallback fallback
 )
-    : invalidUtf8Fallback(std::move(fallback)), steps(std::move(compiledSteps)) {}
+    : invalidUtf8Fallback(std::move(fallback)), steps(std::move(compiledSteps)) {
+  if (const auto* replacement = std::get_if<std::string>(&invalidUtf8Fallback);
+      replacement != nullptr && !isValidUtf8(*replacement))
+    throw std::invalid_argument(
+        std::format("invalid_utf8_fallback {:?} is not valid UTF-8", *replacement)
+    );
+
+  for (const CompiledNormalizationStep& step : steps) {
+    if (!isValidUtf8(step.name))
+      throw std::invalid_argument(
+          std::format("normalization step has a name {:?} that is not valid UTF-8", step.name)
+      );
+
+    if (step.trieUnits.empty()) {
+      if (!step.outputs.empty() || !step.outputOffsets.empty())
+        throw std::invalid_argument(
+            std::format("normalization step {:?} has outputs but no trie", step.name)
+        );
+
+      continue;
+    }
+
+    if (step.outputOffsets.size() < 2 ||
+        step.outputOffsets.front() != 0 ||
+        step.outputOffsets.back() != step.outputs.size() ||
+        !std::ranges::is_sorted(step.outputOffsets))
+      throw std::invalid_argument(
+          std::format("normalization step {:?} has inconsistent output offsets", step.name)
+      );
+
+    for (size_t ruleIndex = 0; ruleIndex + 1 < step.outputOffsets.size(); ++ruleIndex)
+      if (const auto output = getRuleOutput(step, ruleIndex); !isValidUtf8(output))
+        throw std::invalid_argument(
+            std::format(
+                "normalization step {:?} has a rule output {:?} that is not valid UTF-8",
+                step.name,
+                output
+            )
+        );
+
+    if (!isValidTrie(step.trieUnits, step.outputOffsets.size() - 1))
+      throw std::invalid_argument(
+          std::format("normalization step {:?} has a malformed trie", step.name)
+      );
+  }
+}
 
 std::string_view wdym::Normalizer::normalize(std::string_view text, std::string& buffer) const {
   const auto* invalidUtf8Replacement = std::get_if<std::string>(&invalidUtf8Fallback);
@@ -146,68 +233,4 @@ std::string_view wdym::Normalizer::normalize(std::string_view text, std::string&
   }
 
   return normalizedText;
-}
-
-void wdym::validateNormalizationSettings(const NormalizationSettings& settings) {
-  if (const auto* invalidUtf8Replacement =
-          std::get_if<std::string>(&settings.invalid_utf8_fallback);
-      invalidUtf8Replacement != nullptr && !isValidUtf8(*invalidUtf8Replacement))
-    throw std::invalid_argument(
-        std::format("invalid_utf8_fallback {:?} is not valid UTF-8", *invalidUtf8Replacement)
-    );
-
-  for (size_t stepIndex = 0; stepIndex < settings.steps.size(); ++stepIndex) {
-    const NormalizationStep& step = settings.steps[stepIndex];
-
-    if (!isValidUtf8(step.name))
-      throw std::invalid_argument(
-          std::format(
-              "normalization step {} has a name {:?} that is not valid UTF-8", stepIndex, step.name
-          )
-      );
-
-    const std::string stepDescription =
-        step.name.empty() ? std::format("normalization step {}", stepIndex)
-                          : std::format("normalization step {} ({:?})", stepIndex, step.name);
-    std::unordered_set<std::string_view> inputs;
-
-    for (const ReplacementRule& rule : step.rules) {
-      if (rule.input.empty())
-        throw std::invalid_argument(
-            std::format("{} has a rule with an empty input", stepDescription)
-        );
-
-      if (rule.input.contains('\0'))
-        throw std::invalid_argument(
-            std::format(
-                "{} has a rule input {:?} that contains disallowed U+0000", stepDescription,
-                rule.input
-            )
-        );
-
-      if (!isValidUtf8(rule.input))
-        throw std::invalid_argument(
-            std::format(
-                "{} has a rule input {:?} that is not valid UTF-8", stepDescription, rule.input
-            )
-        );
-
-      if (!isValidUtf8(rule.output))
-        throw std::invalid_argument(
-            std::format(
-                "{} has a rule output {:?} that is not valid UTF-8", stepDescription, rule.output
-            )
-        );
-
-      if (rule.input == rule.output)
-        throw std::invalid_argument(
-            std::format("{} has a rule that maps {:?} to itself", stepDescription, rule.input)
-        );
-
-      if (!inputs.insert(rule.input).second)
-        throw std::invalid_argument(
-            std::format("{} has more than one rule with input {:?}", stepDescription, rule.input)
-        );
-    }
-  }
 }

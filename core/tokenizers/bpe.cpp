@@ -178,8 +178,6 @@ PairMerge getPairMerge(
 }
 
 wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettings settings) {
-  wdym::validateNormalizationSettings(settings.normalization);
-
   if (std::holds_alternative<wdym::KeepInvalidUtf8>(settings.normalization.invalid_utf8_fallback))
     throw std::invalid_argument("normalization for BytePairEncoding cannot keep invalid UTF-8");
 
