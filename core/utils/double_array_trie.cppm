@@ -32,6 +32,8 @@ class DoubleArrayTrieUnit {
 
   inline std::uint32_t keyIndex() const { return bits_ & ((1U << 31) - 1); }
 
+  inline bool isLeaf() const { return bits_ >> 31; }
+
  private:
   std::uint32_t bits_;
 };
@@ -67,5 +69,35 @@ inline std::optional<LongestPrefixMatch> findLongestPrefixMatch(
   }
 
   return longestPrefixMatch;
+}
+
+inline bool isValidTrie(std::span<const std::uint32_t> trieUnits, std::size_t keyCount) {
+  constexpr std::size_t BLOCK_SIZE = 256;
+  if (trieUnits.empty() ||
+      trieUnits.size() % BLOCK_SIZE != 0)
+    return false;
+
+  for (std::size_t position = 0; position < trieUnits.size(); ++position) {
+    const DoubleArrayTrieUnit unit(trieUnits[position]);
+
+    if (unit.isLeaf()) {
+      if (position == 0)
+        return false;
+
+      continue;
+    }
+
+    const std::size_t childPosition = position ^ unit.offset();
+    if (childPosition >= trieUnits.size())
+      return false;
+
+    if (unit.hasLeaf()) {
+      const DoubleArrayTrieUnit leaf(trieUnits[childPosition]);
+      if (!leaf.isLeaf() || leaf.keyIndex() >= keyCount)
+        return false;
+    }
+  }
+
+  return true;
 }
 }  // namespace wdym
