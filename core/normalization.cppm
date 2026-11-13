@@ -21,8 +21,10 @@ struct KeepInvalidUtf8 {
   bool operator==(const KeepInvalidUtf8&) const = default;
 };
 
+using InvalidUtf8Fallback = std::variant<std::string, KeepInvalidUtf8>;
+
 struct NormalizationSettings {
-  std::variant<std::string, KeepInvalidUtf8> invalid_utf8_fallback = "�";
+  InvalidUtf8Fallback invalid_utf8_fallback = "�";
   std::vector<NormalizationStep> steps = {};
 
   bool operator==(const NormalizationSettings&) const = default;
@@ -31,6 +33,8 @@ struct NormalizationSettings {
 
 namespace wdym {
 struct CompiledNormalizationStep {
+  std::string name;
+
   // Holds representation of a double-array trie built by darts-clone library
   // for looking up replacement rule inputs
   std::vector<std::uint32_t> trieUnits;
@@ -41,17 +45,24 @@ struct CompiledNormalizationStep {
   // Each index in the list corresponds to the rule index returned by a trie lookup, and the
   // value is where that rule's output starts in outputs
   std::vector<std::uint32_t> outputOffsets;
+
+  bool operator==(const CompiledNormalizationStep&) const = default;
 };
 
 class Normalizer {
  public:
   explicit Normalizer(const NormalizationSettings& settings);
+  explicit Normalizer(
+      std::vector<CompiledNormalizationStep> compiledSteps,
+      InvalidUtf8Fallback fallback
+  );
 
   std::string_view normalize(std::string_view text, std::string& buffer) const;
 
- private:
-  const std::variant<std::string, KeepInvalidUtf8> invalidUtf8Fallback_;
-  const std::vector<CompiledNormalizationStep> steps_;
+  bool operator==(const Normalizer&) const = default;
+
+  const InvalidUtf8Fallback invalidUtf8Fallback;
+  const std::vector<CompiledNormalizationStep> steps;
 };
 
 void validateNormalizationSettings(const NormalizationSettings& settings);

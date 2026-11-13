@@ -75,6 +75,7 @@ bool replaceRuleMatches(
 
 wdym::CompiledNormalizationStep compileNormalizationStep(const wdym::NormalizationStep& step) {
   wdym::CompiledNormalizationStep compiledStep;
+  compiledStep.name = step.name;
   if (step.rules.empty())
     return compiledStep;
 
@@ -120,18 +121,23 @@ std::vector<wdym::CompiledNormalizationStep> compileNormalizationSteps(
 }  // namespace
 
 wdym::Normalizer::Normalizer(const NormalizationSettings& settings)
-    : invalidUtf8Fallback_(settings.invalid_utf8_fallback),
-      steps_(compileNormalizationSteps(settings.steps)) {}
+    : Normalizer(compileNormalizationSteps(settings.steps), settings.invalid_utf8_fallback) {}
+
+wdym::Normalizer::Normalizer(
+    std::vector<CompiledNormalizationStep> compiledSteps,
+    InvalidUtf8Fallback fallback
+)
+    : invalidUtf8Fallback(std::move(fallback)), steps(std::move(compiledSteps)) {}
 
 std::string_view wdym::Normalizer::normalize(std::string_view text, std::string& buffer) const {
-  const auto* invalidUtf8Replacement = std::get_if<std::string>(&invalidUtf8Fallback_);
+  const auto* invalidUtf8Replacement = std::get_if<std::string>(&invalidUtf8Fallback);
   std::string_view normalizedText =
       invalidUtf8Replacement != nullptr && replaceInvalidUtf8(text, *invalidUtf8Replacement, buffer)
           ? std::string_view(buffer)
           : text;
   std::string stepOutputBuffer;
 
-  for (const CompiledNormalizationStep& step : steps_) {
+  for (const CompiledNormalizationStep& step : steps) {
     if (!replaceRuleMatches(normalizedText, step, stepOutputBuffer))
       continue;
 
