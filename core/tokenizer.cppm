@@ -12,8 +12,9 @@ export namespace wdym {
 using TextStream = std::generator<std::string_view>;
 
 template <typename T>
-concept Tokenizer = requires(const T& tokenizer, const std::filesystem::path& path) {
-  { tokenizer.save(path) } -> std::same_as<void>;
+concept Tokenizer = requires(const T& tokenizer, std::span<const std::byte> bytes) {
+  { tokenizer.to_bytes() } -> std::same_as<std::vector<std::byte>>;
+  { T::from_bytes(bytes) } -> std::same_as<T>;
 };
 
 template <Tokenizer T>
@@ -67,6 +68,39 @@ class TokenizerBase {
       const NormalizationSettings& normalization = {}
   ) {
     return train(streamFileLines(files), options, normalization);
+  }
+
+  void save(const std::filesystem::path& path) const {
+    const std::vector<std::byte> bytes = static_cast<const Derived&>(*this).to_bytes();
+
+    std::ofstream file(path, std::ios::binary);
+    file.write(
+        reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())
+    );
+    file.flush();
+
+    if (!file)
+      throw std::filesystem::filesystem_error(
+          "could not write tokenizer file", path, std::error_code(errno, std::generic_category())
+      );
+  }
+
+  static Derived load(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+      throw std::filesystem::filesystem_error(
+          "could not open tokenizer file", path, std::error_code(errno, std::generic_category())
+      );
+
+    std::vector<std::byte> bytes(std::filesystem::file_size(path));
+    file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+
+    if (!file)
+      throw std::filesystem::filesystem_error(
+          "could not read tokenizer file", path, std::error_code(errno, std::generic_category())
+      );
+
+    return Derived::from_bytes(bytes);
   }
 
   std::string normalize(std::string_view text) const {

@@ -18,11 +18,12 @@ ByteLevelBPETokenizer ByteLevelBPETokenizer::train_from_texts(
   return ByteLevelBPETokenizer(std::move(normalizer));
 }
 
-ByteLevelBPETokenizer ByteLevelBPETokenizer::from_file(const std::filesystem::path& path) {
+std::vector<std::byte> ByteLevelBPETokenizer::to_bytes() const {
   // TODO
-  return ByteLevelBPETokenizer(Normalizer(NormalizationSettings{}));
+  return {};
 }
 
-void ByteLevelBPETokenizer::save(const std::filesystem::path& path) const {
+ByteLevelBPETokenizer ByteLevelBPETokenizer::from_bytes(std::span<const std::byte> bytes) {
   // TODO
+  return ByteLevelBPETokenizer(Normalizer(NormalizationSettings{}));
 }

@@ -12,8 +12,8 @@ struct ByteLevelBPETrainOptions {
 class ByteLevelBPETokenizer
     : public TokenizerBase<ByteLevelBPETokenizer, ByteLevelBPETrainOptions> {
  public:
-  static ByteLevelBPETokenizer from_file(const std::filesystem::path& path);
-  void save(const std::filesystem::path& path) const;
+  std::vector<std::byte> to_bytes() const;
+  static ByteLevelBPETokenizer from_bytes(std::span<const std::byte> bytes);
 
   void encode();
   void decode();

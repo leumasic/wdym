@@ -108,8 +108,8 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
     std::vector<Set> sets_;
   };
 
-  void save(const std::filesystem::path& path) const;
-  static BytePairEncoding load(const std::filesystem::path& path);
+  std::vector<std::byte> to_bytes() const;
+  static BytePairEncoding from_bytes(std::span<const std::byte> bytes);
 
   std::vector<uint32_t> encode(std::string_view text) const;
   void encode(std::string_view text, std::vector<uint32_t>& ids) const;
