@@ -6,6 +6,7 @@ export module wdym:bpe;
 
 import std.compat;
 import :containers;
+import :markup_token;
 import :normalization;
 import :tokenizer;
 
@@ -22,21 +23,6 @@ struct ByteFallback {
 
   bool operator==(const ByteFallback&) const = default;
 };
-
-// TODO: make user-defined literal. Also, markup tokens aren't unique to BPE
-struct MarkupToken {
-  std::string text;
-
-  bool operator==(const MarkupToken&) const = default;
-};
-
-using TextOrMarkupToken = std::variant<std::string, MarkupToken>;
-
-namespace literals {
-inline MarkupToken operator""_markup(const char* text, size_t size) {
-  return MarkupToken{std::string(text, size)};
-}
-}  // namespace literals
 
 struct BytePairEncodingSettings {
   std::vector<std::string> markup_tokens = {};

@@ -83,6 +83,7 @@ target_sources(wdym PUBLIC
     core/utils/containers.cppm
     core/utils/double_array_trie.cppm
     core/utils/utf8.cppm
+    core/markup_token.cppm
     core/normalization.cppm
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
