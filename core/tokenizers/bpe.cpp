@@ -189,9 +189,25 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
         )
     );
 
+  for (const auto& [name, text] :
+       std::initializer_list<std::pair<std::string_view, std::string_view>>{
+           {"word_delimiter", settings.word_delimiter},
+           {"word_prefix", settings.word_prefix},
+           {"word_suffix", settings.word_suffix},
+       })
+    if (!wdym::isValidUtf8(text))
+      throw std::invalid_argument(std::format("{} {:?} is not valid UTF-8", name, text));
+
   if (const auto* stringFallback = std::get_if<std::string>(&settings.unknown_character_fallback);
-      stringFallback != nullptr && stringFallback->empty())
-    throw std::invalid_argument("unknown_character_fallback is an empty token");
+      stringFallback != nullptr) {
+    if (stringFallback->empty())
+      throw std::invalid_argument("unknown_character_fallback is an empty token");
+
+    if (!wdym::isValidUtf8(*stringFallback))
+      throw std::invalid_argument(
+          std::format("unknown_character_fallback {:?} is not valid UTF-8", *stringFallback)
+      );
+  }
 
   if (const auto* byteFallback =
           std::get_if<wdym::ByteFallback>(&settings.unknown_character_fallback);
@@ -203,9 +219,15 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
         )
     );
 
-  for (const std::string_view markupToken : settings.markup_tokens)
+  for (const std::string_view markupToken : settings.markup_tokens) {
     if (markupToken.empty())
       throw std::invalid_argument("markup_tokens contains an empty token");
+
+    if (!wdym::isValidUtf8(markupToken))
+      throw std::invalid_argument(
+          std::format("markup_tokens contains {:?}, which is not valid UTF-8", markupToken)
+      );
+  }
 
   // We deduplicate markup tokens but we also make sure that they yield stable
   // symbol ids no matter their order
