@@ -24,32 +24,49 @@ class TokenizerBase {
  public:
   using TrainOptions = Options;
 
-  static Derived train(TextStream texts, const Options& options = {}) {
-    return Derived::train_from_texts(std::move(texts), options);
+  static Derived train(
+      TextStream texts,
+      const Options& options = {},
+      const NormalizationSettings& normalization = {}
+  ) {
+    return Derived::train_from_texts(std::move(texts), options, Normalizer(normalization));
   }
 
   template <std::ranges::input_range Texts>
     requires std::convertible_to<std::ranges::range_reference_t<Texts>, std::string_view>
-  static Derived train(Texts&& texts, const Options& options = {}) {
-    return train(streamTexts(texts), options);
+  static Derived train(
+      Texts&& texts,
+      const Options& options = {},
+      const NormalizationSettings& normalization = {}
+  ) {
+    return train(streamTexts(texts), options, normalization);
   }
 
-  static Derived train_from_files(const std::filesystem::path& file, const Options& options = {}) {
-    return train_from_files(std::span(&file, 1), options);
+  static Derived train_from_files(
+      const std::filesystem::path& file,
+      const Options& options = {},
+      const NormalizationSettings& normalization = {}
+  ) {
+    return train_from_files(std::span(&file, 1), options, normalization);
   }
 
   static Derived train_from_files(
       std::initializer_list<std::filesystem::path> files,
-      const Options& options = {}
+      const Options& options = {},
+      const NormalizationSettings& normalization = {}
   ) {
-    return train(streamFileLines(files), options);
+    return train(streamFileLines(files), options, normalization);
   }
 
   template <std::ranges::input_range Files>
     requires std::convertible_to<std::ranges::range_reference_t<Files>, std::filesystem::path> &&
              (!std::same_as<std::remove_cvref_t<Files>, std::filesystem::path>)
-  static Derived train_from_files(Files&& files, const Options& options = {}) {
-    return train(streamFileLines(files), options);
+  static Derived train_from_files(
+      Files&& files,
+      const Options& options = {},
+      const NormalizationSettings& normalization = {}
+  ) {
+    return train(streamFileLines(files), options, normalization);
   }
 
   std::string normalize(std::string_view text) const {
@@ -88,12 +105,13 @@ class TokenizerBase {
     }
   }
 
-  explicit TokenizerBase(const NormalizationSettings& normalizationSettings)
-      : normalizer_(normalizationSettings) {
+  explicit TokenizerBase(Normalizer normalizer) : normalizer_(std::move(normalizer)) {
     static_assert(Tokenizer<Derived>, "tokenizers must implement the Tokenizer concept");
     static_assert(
-        requires(TextStream texts, const Options& options) {
-          { Derived::train_from_texts(std::move(texts), options) } -> std::same_as<Derived>;
+        requires(TextStream texts, const Options& options, Normalizer normalizer) {
+          {
+            Derived::train_from_texts(std::move(texts), options, std::move(normalizer))
+          } -> std::same_as<Derived>;
         }, "tokenizers must implement train_from_texts"
     );
   };

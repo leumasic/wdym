@@ -36,10 +36,10 @@ void splitWords(std::string_view text, std::string_view delimiter, OnWord&& onWo
 // TODO: make use of multithreading
 StringKeyMap<uint64_t> getWordToCount(
     wdym::TextStream texts,
+    const wdym::Normalizer& normalizer,
     const wdym::BytePairEncodingSettings& settings
 ) {
   StringKeyMap<uint64_t> wordToCount;
-  const wdym::Normalizer normalizer(settings.normalization);
   std::string normalizationBuffer;
 
   for (const auto text : texts) {
@@ -178,9 +178,6 @@ PairMerge getPairMerge(
 }
 
 wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettings settings) {
-  if (std::holds_alternative<wdym::KeepInvalidUtf8>(settings.normalization.invalid_utf8_fallback))
-    throw std::invalid_argument("normalization for BytePairEncoding cannot keep invalid UTF-8");
-
   if (const auto* markupFallback =
           std::get_if<wdym::MarkupToken>(&settings.unknown_character_fallback);
       markupFallback != nullptr &&
@@ -378,6 +375,11 @@ std::vector<wdym::TokenSource> buildTokenIdToTokenSource(
   return tokenIdToTokenSource;
 }
 
+void assertInvalidUtf8IsReplaced(const wdym::Normalizer& normalizer) {
+  if (std::holds_alternative<wdym::KeepInvalidUtf8>(normalizer.invalidUtf8Fallback))
+    throw std::invalid_argument("normalization for BytePairEncoding cannot keep invalid UTF-8");
+}
+
 class BytePairEncodingTrainer {
  public:
   explicit BytePairEncodingTrainer(const wdym::BytePairEncodingSettings& settings)
@@ -548,16 +550,19 @@ class BytePairEncodingTrainer {
 }  // namespace
 
 BytePairEncoding::BytePairEncoding(
+    Normalizer normalizer,
     BytePairEncodingSettings settings,
     StringKeySet symbols,
-    unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId
+    unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId,
+    StringKeyMap<uint32_t> markupTokenToTokenId,
+    std::vector<uint32_t> symbolIdToTokenId
 )
-    : TokenizerBase(settings.normalization),
+    : TokenizerBase(std::move(normalizer)),
       settings_(std::move(settings)),
       symbols_(std::move(symbols)),
       pairKeyToMergedSymbolId_(std::move(pairKeyToMergedSymbolId)),
-      markupTokenToTokenId_(buildMarkupTokenToTokenId(settings_, symbols_)),
-      symbolIdToTokenId_(buildSymbolIdToTokenId(symbols_)),
+      markupTokenToTokenId_(std::move(markupTokenToTokenId)),
+      symbolIdToTokenId_(std::move(symbolIdToTokenId)),
       tokenIdToTokenSource_(
           buildTokenIdToTokenSource(symbols_, symbolIdToTokenId_, markupTokenToTokenId_)
       ),
@@ -617,14 +622,19 @@ void BytePairEncoding::WordCache::insert(
   set.entries[1 - insertionWay].isMostRecentlyUsed = false;
 }
 
-BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const TrainOptions& options) {
+BytePairEncoding BytePairEncoding::train_from_texts(
+    TextStream texts,
+    const TrainOptions& options,
+    Normalizer normalizer
+) {
   const auto settings = getValidatedSettings(options.settings);
+  assertInvalidUtf8IsReplaced(normalizer);
 
   BytePairEncodingTrainer trainer(settings);
 
   // MEMORY OPTIMIZATION: separate scope to free up wordToCount once done with it
   {
-    auto wordToCount = getWordToCount(std::move(texts), settings);
+    auto wordToCount = getWordToCount(std::move(texts), normalizer, settings);
 
     trainer.registerAlphabet(wordToCount);
 
@@ -653,8 +663,16 @@ BytePairEncoding BytePairEncoding::train_from_texts(TextStream texts, const Trai
     trainer.mergePair(mostFrequentPairKey.value());
   }
 
+  auto markupTokenToTokenId = buildMarkupTokenToTokenId(settings, trainer.symbols);
+  auto symbolIdToTokenId = buildSymbolIdToTokenId(trainer.symbols);
+
   return BytePairEncoding(
-      settings, std::move(trainer.symbols), std::move(trainer.pairKeyToMergedSymbolId)
+      std::move(normalizer),
+      settings,
+      std::move(trainer.symbols),
+      std::move(trainer.pairKeyToMergedSymbolId),
+      std::move(markupTokenToTokenId),
+      std::move(symbolIdToTokenId)
   );
 }
 

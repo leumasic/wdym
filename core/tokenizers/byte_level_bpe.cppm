@@ -1,6 +1,7 @@
 export module wdym:byte_level_bpe;
 
 import std;
+import :normalization;
 import :tokenizer;
 
 export namespace wdym {
@@ -22,9 +23,13 @@ class ByteLevelBPETokenizer
  private:
   friend TokenizerBase;
 
-  static ByteLevelBPETokenizer train_from_texts(TextStream texts, const TrainOptions& options);
+  static ByteLevelBPETokenizer train_from_texts(
+      TextStream texts,
+      const TrainOptions& options,
+      Normalizer normalizer
+  );
 
-  explicit ByteLevelBPETokenizer();
+  explicit ByteLevelBPETokenizer(Normalizer normalizer);
 };
 }  // namespace wdym
 

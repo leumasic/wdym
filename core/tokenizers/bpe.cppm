@@ -23,7 +23,7 @@ struct ByteFallback {
   bool operator==(const ByteFallback&) const = default;
 };
 
-// TODO: make user-defined literal
+// TODO: make user-defined literal. Also, markup tokens aren't unique to BPE
 struct MarkupToken {
   std::string text;
 
@@ -40,8 +40,6 @@ inline MarkupToken operator""_markup(const char* text, size_t size) {
 
 struct BytePairEncodingSettings {
   std::vector<std::string> markup_tokens = {};
-
-  NormalizationSettings normalization = {};
 
   std::string word_delimiter = " ";
 
@@ -162,8 +160,11 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
 
   bool operator==(const BytePairEncoding& other) const {
     return settings_ == other.settings_ &&
+           normalizer_ == other.normalizer_ &&
            symbols_.values() == other.symbols_.values() &&
-           pairKeyToMergedSymbolId_.values() == other.pairKeyToMergedSymbolId_.values();
+           pairKeyToMergedSymbolId_.values() == other.pairKeyToMergedSymbolId_.values() &&
+           markupTokenToTokenId_.values() == other.markupTokenToTokenId_.values() &&
+           symbolIdToTokenId_ == other.symbolIdToTokenId_;
   }
 
   std::vector<std::pair<std::string, std::string>> merges() const;
@@ -172,12 +173,19 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   friend TokenizerBase;
 
   // TODO: use camel case for private members
-  static BytePairEncoding train_from_texts(TextStream texts, const TrainOptions& options);
+  static BytePairEncoding train_from_texts(
+      TextStream texts,
+      const TrainOptions& options,
+      Normalizer normalizer
+  );
 
   explicit BytePairEncoding(
+      Normalizer normalizer,
       BytePairEncodingSettings settings,
       StringKeySet symbols,
-      ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId
+      ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId,
+      StringKeyMap<uint32_t> markupTokenToTokenId,
+      std::vector<uint32_t> symbolIdToTokenId
   );
 
   void encodeWords(std::string_view text, std::vector<uint32_t>& ids, WordCache* cache) const;
