@@ -37,10 +37,43 @@ FetchContent_Declare(darts_clone
 )
 FetchContent_MakeAvailable(darts_clone)
 
+set(FLATBUFFERS_BUILD_TESTS OFF)
+FetchContent_Declare(flatbuffers
+  GIT_REPOSITORY https://github.com/google/flatbuffers.git
+  GIT_TAG        v25.12.19
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(flatbuffers)
+
+set(WDYM_SCHEMAS
+  ${PROJECT_SOURCE_DIR}/core/normalization.fbs
+  ${PROJECT_SOURCE_DIR}/core/markup_token.fbs
+  ${PROJECT_SOURCE_DIR}/core/tokenizers/bpe.fbs
+  ${PROJECT_SOURCE_DIR}/core/tokenizer.fbs)
+set(WDYM_GENERATED_DIR ${PROJECT_BINARY_DIR}/generated)
+set(WDYM_GENERATED_HEADERS
+  ${WDYM_GENERATED_DIR}/normalization_generated.h
+  ${WDYM_GENERATED_DIR}/markup_token_generated.h
+  ${WDYM_GENERATED_DIR}/bpe_generated.h
+  ${WDYM_GENERATED_DIR}/tokenizer_generated.h)
+
+add_custom_command(
+  OUTPUT ${WDYM_GENERATED_HEADERS}
+  COMMAND flatc --cpp --scoped-enums
+    -I ${PROJECT_SOURCE_DIR}/core
+    -o ${WDYM_GENERATED_DIR}
+    ${WDYM_SCHEMAS}
+  DEPENDS flatc ${WDYM_SCHEMAS}
+  VERBATIM
+)
+
 add_library(wdym STATIC
   core/normalization.cpp
   core/tokenizers/byte_level_bpe.cpp
   core/tokenizers/bpe.cpp
+  ${WDYM_GENERATED_HEADERS}
 )
 add_library(wdym::wdym ALIAS wdym)
 
@@ -58,7 +91,10 @@ target_compile_features(wdym PUBLIC cxx_std_23)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
 target_link_libraries(wdym PRIVATE $<BUILD_INTERFACE:unordered_dense::unordered_dense>)
-target_include_directories(wdym SYSTEM PRIVATE $<BUILD_INTERFACE:${darts_clone_SOURCE_DIR}/include>)
+target_include_directories(wdym SYSTEM PRIVATE
+  $<BUILD_INTERFACE:${darts_clone_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${WDYM_GENERATED_DIR}>)
 set_target_properties(wdym PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if (WDYM_BUILD_PYTHON)
