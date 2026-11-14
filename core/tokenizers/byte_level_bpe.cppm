@@ -11,6 +11,8 @@ struct ByteLevelBPETrainOptions {
 
 class ByteLevelBPETokenizer
     : public TokenizerBase<ByteLevelBPETokenizer, ByteLevelBPETrainOptions> {
+  friend TokenizerBase;
+
  public:
   std::vector<std::byte> to_bytes() const;
   static ByteLevelBPETokenizer from_bytes(std::span<const std::byte> bytes);
@@ -21,8 +23,6 @@ class ByteLevelBPETokenizer
   std::unordered_map<std::string, int> vocabulary;
 
  private:
-  friend TokenizerBase;
-
   static ByteLevelBPETokenizer trainFromTexts(
       TextStream texts,
       const TrainOptions& options,

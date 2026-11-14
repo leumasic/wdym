@@ -22,6 +22,10 @@ inline constexpr std::string_view tokenizer_name = {};
 
 template <typename Derived, typename Options>
 class TokenizerBase {
+  // Prevents inheritance mistakes like
+  // class SomeTokenizer : public TokenizerBase<OtherTokenizer, SomeOptions>
+  friend Derived;
+
  public:
   using TrainOptions = Options;
 
@@ -149,9 +153,6 @@ class TokenizerBase {
         }, "tokenizers must implement trainFromTexts"
     );
   };
-  // Prevents inheritance mistakes like
-  // class SomeTokenizer : public TokenizerBase<OtherTokenizer, SomeOptions>
-  friend Derived;
 };
 
 }  // namespace wdym

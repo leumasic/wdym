@@ -60,11 +60,15 @@ struct BytePairEncodingDecodeOptions {
 };
 
 class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncodingTrainOptions> {
+  friend TokenizerBase;
+
  public:
   // Fixed-size cache to speed up encoding by storing symbol IDs of words that
   // don't encode to a single whole-word symbol. The cache should not be shared
   // between tokenizers that encode words differently. Not thread-safe
   class WordCache {
+    friend BytePairEncoding;
+
    public:
     inline explicit WordCache(size_t capacity = 32768)
         : sets_(std::bit_ceil(std::max<size_t>(capacity / WAYS_PER_SET, 1))) {}
@@ -72,8 +76,6 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
     inline void clear() { std::ranges::fill(sets_, Set{}); }
 
    private:
-    friend BytePairEncoding;
-
     // Cache is 2-way set-associative
     static constexpr size_t WAYS_PER_SET = 2;
     static constexpr size_t MAX_WORD_SIZE = 13;
@@ -155,8 +157,6 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   std::vector<std::pair<std::string, std::string>> merges() const;
 
  private:
-  friend TokenizerBase;
-
   // TODO: use camel case for private members
   static BytePairEncoding trainFromTexts(
       TextStream texts,
