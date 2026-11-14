@@ -49,6 +49,8 @@ struct BytePairEncodingTrainOptions {
   BytePairEncodingSettings settings = {};
 };
 
+using BytePairEncodingEncodeOptions = std::monostate;
+
 struct BytePairEncodingDecodeOptions {
   bool remove_leading_word_prefix = true;
   bool remove_trailing_word_suffix = true;
@@ -59,7 +61,11 @@ struct BytePairEncodingDecodeOptions {
   bool operator==(const BytePairEncodingDecodeOptions&) const = default;
 };
 
-class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncodingTrainOptions> {
+class BytePairEncoding : public TokenizerBase<
+                             BytePairEncoding,
+                             BytePairEncodingTrainOptions,
+                             BytePairEncodingEncodeOptions,
+                             BytePairEncodingDecodeOptions> {
   friend TokenizerBase;
 
  public:

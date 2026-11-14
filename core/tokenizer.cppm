@@ -12,26 +12,40 @@ export namespace wdym {
 using TextStream = std::generator<std::string_view>;
 
 template <typename T>
-concept Tokenizer = requires(const T& tokenizer, std::span<const std::byte> bytes) {
+concept Tokenizer = requires(
+    const T& tokenizer,
+    std::span<const std::byte> bytes,
+    std::string_view text,
+    std::span<const std::uint32_t> ids,
+    const typename T::DecodeOptions& decodeOptions
+) {
   { tokenizer.to_bytes() } -> std::same_as<std::vector<std::byte>>;
   { T::from_bytes(bytes) } -> std::same_as<T>;
+  { tokenizer.encode(text) } -> std::same_as<std::vector<std::uint32_t>>;
+  { tokenizer.decode(ids, decodeOptions) } -> std::same_as<std::string>;
 };
 
 template <Tokenizer T>
 inline constexpr std::string_view tokenizer_name = {};
 
-template <typename Derived, typename Options>
+template <
+    typename Derived,
+    typename TrainOptionsType = std::monostate,
+    typename EncodeOptionsType = std::monostate,
+    typename DecodeOptionsType = std::monostate>
 class TokenizerBase {
   // Prevents inheritance mistakes like
   // class SomeTokenizer : public TokenizerBase<OtherTokenizer, SomeOptions>
   friend Derived;
 
  public:
-  using TrainOptions = Options;
+  using TrainOptions = TrainOptionsType;
+  using EncodeOptions = EncodeOptionsType;
+  using DecodeOptions = DecodeOptionsType;
 
   static Derived train(
       TextStream texts,
-      const Options& options = {},
+      const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
     return Derived::trainFromTexts(std::move(texts), options, Normalizer(normalization));
@@ -41,7 +55,7 @@ class TokenizerBase {
     requires std::convertible_to<std::ranges::range_reference_t<Texts>, std::string_view>
   static Derived train(
       Texts&& texts,
-      const Options& options = {},
+      const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
     return train(streamTexts(texts), options, normalization);
@@ -49,7 +63,7 @@ class TokenizerBase {
 
   static Derived train_from_files(
       const std::filesystem::path& file,
-      const Options& options = {},
+      const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
     return train_from_files(std::span(&file, 1), options, normalization);
@@ -57,7 +71,7 @@ class TokenizerBase {
 
   static Derived train_from_files(
       std::initializer_list<std::filesystem::path> files,
-      const Options& options = {},
+      const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
     return train(streamFileLines(files), options, normalization);
@@ -68,7 +82,7 @@ class TokenizerBase {
              (!std::same_as<std::remove_cvref_t<Files>, std::filesystem::path>)
   static Derived train_from_files(
       Files&& files,
-      const Options& options = {},
+      const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
     return train(streamFileLines(files), options, normalization);
@@ -146,7 +160,7 @@ class TokenizerBase {
   explicit TokenizerBase(Normalizer normalizer) : normalizer_(std::move(normalizer)) {
     static_assert(Tokenizer<Derived>, "tokenizers must implement the Tokenizer concept");
     static_assert(
-        requires(TextStream texts, const Options& options, Normalizer normalizer) {
+        requires(TextStream texts, const TrainOptionsType& options, Normalizer normalizer) {
           {
             Derived::trainFromTexts(std::move(texts), options, std::move(normalizer))
           } -> std::same_as<Derived>;

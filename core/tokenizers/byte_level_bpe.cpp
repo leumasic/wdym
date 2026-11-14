@@ -27,3 +27,16 @@ ByteLevelBPETokenizer ByteLevelBPETokenizer::from_bytes(std::span<const std::byt
   // TODO
   return ByteLevelBPETokenizer(Normalizer(NormalizationSettings{}));
 }
+
+std::vector<std::uint32_t> ByteLevelBPETokenizer::encode(std::string_view text) const {
+  // TODO
+  return {};
+}
+
+std::string ByteLevelBPETokenizer::decode(
+    std::span<const std::uint32_t> ids,
+    const DecodeOptions& options
+) const {
+  // TODO
+  return {};
+}

@@ -17,8 +17,8 @@ class ByteLevelBPETokenizer
   std::vector<std::byte> to_bytes() const;
   static ByteLevelBPETokenizer from_bytes(std::span<const std::byte> bytes);
 
-  void encode();
-  void decode();
+  std::vector<std::uint32_t> encode(std::string_view text) const;
+  std::string decode(std::span<const std::uint32_t> ids, const DecodeOptions& options = {}) const;
 
   std::unordered_map<std::string, int> vocabulary;
 
