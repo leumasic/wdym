@@ -36,8 +36,3 @@ class ByteLevelBPETokenizer
   explicit ByteLevelBPETokenizer(Normalizer normalizer);
 };
 }  // namespace wdym
-
-namespace wdym {
-template <>
-constexpr std::string_view tokenizerName<ByteLevelBPETokenizer> = "ByteLevelBPETokenizer";
-}  // namespace wdym

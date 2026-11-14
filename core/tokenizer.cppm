@@ -25,9 +25,6 @@ concept Tokenizer = requires(
   { tokenizer.decode(tokenIds, decodeOptions) } -> std::same_as<std::string>;
 };
 
-template <Tokenizer T>
-inline constexpr std::string_view tokenizerName = {};
-
 template <
     typename Derived,
     typename TrainOptionsType = std::monostate,

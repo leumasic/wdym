@@ -214,8 +214,3 @@ class BytePairEncoding : public TokenizerBase<
   const StringKeyMap<uint32_t> wordToWholeWordSymbolId_;
 };
 }  // namespace wdym
-
-namespace wdym {
-template <>
-constexpr std::string_view tokenizerName<BytePairEncoding> = "BytePairEncoding";
-}  // namespace wdym

@@ -18,5 +18,6 @@ CheckOptions:
   readability-identifier-naming.PrivateMemberCase: camelBack
   readability-identifier-naming.PrivateMemberSuffix: _
   readability-identifier-naming.ClassConstantCase: UPPER_CASE
+  readability-identifier-naming.GlobalConstexprVariableCase: UPPER_CASE
   readability-identifier-naming.LocalConstexprVariableCase: UPPER_CASE
   readability-identifier-naming.EnumConstantCase: UPPER_CASE

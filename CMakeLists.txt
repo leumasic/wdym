@@ -85,6 +85,7 @@ target_sources(wdym PUBLIC
     core/utils/utf8.cppm
     core/markup_token.cppm
     core/normalization.cppm
+    core/segmentation.cppm
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
     core/tokenizers/byte_level_bpe.cppm)
@@ -113,6 +114,7 @@ if (WDYM_BUILD_PYTHON)
 
   nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/wdym_binding.cpp)
   target_link_libraries(wdym_ext PRIVATE wdym::wdym)
+  target_compile_options(wdym_ext PRIVATE -freflection)
   install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
 endif()
 

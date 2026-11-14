@@ -9,33 +9,18 @@ module wdym;
 import std.compat;
 import :containers;
 import :normalization;
+import :segmentation;
 import :tokenizer_file;
 import :utf8;
 
 using wdym::BytePairEncoding;
+using wdym::pushBackIfEmptyOrNotEqualToLast;
+using wdym::splitWords;
 using wdym::StringKeyMap;
 using wdym::StringKeySet;
 namespace unordered_dense = ankerl::unordered_dense;
 
 namespace {
-// Really wanted this function (and splitWordSymbols) to return a generator,
-// which would be nicer to use at call sites. But generators can't be inlined
-// (as opposed to this callback-form function) so there is a performance hit.
-// To revisit...
-template <std::invocable<std::string_view> OnWord>
-void splitWords(std::string_view text, std::string_view delimiter, OnWord&& onWord) {
-  if (delimiter.empty()) {
-    if (!text.empty())
-      onWord(text);
-
-    return;
-  }
-
-  for (const auto word : std::views::split(text, delimiter))
-    if (!word.empty())
-      onWord(std::string_view(word));
-}
-
 // TODO: make use of multithreading
 StringKeyMap<uint64_t> getWordToCount(
     wdym::TextStream texts,
@@ -84,13 +69,6 @@ uint32_t getRightSymbolId(uint64_t pairKey) {
 
 uint64_t getPairKey(uint32_t left, uint32_t right) {
   return (uint64_t{left} << 32) | right;
-}
-
-template <typename T, typename U>
-  requires std::same_as<std::remove_cvref_t<U>, T>
-void pushBackIfEmptyOrNotEqualToLast(std::vector<T>& elements, U&& value) {
-  if (elements.empty() || elements.back() != value)
-    elements.push_back(std::forward<U>(value));
 }
 
 std::string_view getNextCharacter(std::string_view text) {
