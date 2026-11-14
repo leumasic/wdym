@@ -119,32 +119,39 @@ class BytePairEncoding : public TokenizerBase<
   static BytePairEncoding from_bytes(std::span<const std::byte> bytes);
 
   std::vector<uint32_t> encode(std::string_view text) const;
-  void encode(std::string_view text, std::vector<uint32_t>& ids) const;
-  void encode(std::string_view text, std::vector<uint32_t>& ids, WordCache& cache) const;
+  void encode(std::string_view text, std::vector<uint32_t>& tokenIds) const;
+  void encode(std::string_view text, std::vector<uint32_t>& tokenIds, WordCache& cache) const;
 
   std::vector<uint32_t> encode_normalized(std::string_view text) const;
-  void encode_normalized(std::string_view text, std::vector<uint32_t>& ids) const;
-  void encode_normalized(std::string_view text, std::vector<uint32_t>& ids, WordCache& cache) const;
+  void encode_normalized(std::string_view text, std::vector<uint32_t>& tokenIds) const;
+  void encode_normalized(
+      std::string_view text,
+      std::vector<uint32_t>& tokenIds,
+      WordCache& cache
+  ) const;
 
   std::vector<uint32_t> encode_parts(std::span<const TextOrMarkupToken> parts) const;
-  void encode_parts(std::span<const TextOrMarkupToken> parts, std::vector<uint32_t>& ids) const;
   void encode_parts(
       std::span<const TextOrMarkupToken> parts,
-      std::vector<uint32_t>& ids,
+      std::vector<uint32_t>& tokenIds
+  ) const;
+  void encode_parts(
+      std::span<const TextOrMarkupToken> parts,
+      std::vector<uint32_t>& tokenIds,
       WordCache& cache
   ) const;
 
   std::string decode(
-      std::span<const uint32_t> ids,
+      std::span<const uint32_t> tokenIds,
       const BytePairEncodingDecodeOptions& options = {}
   ) const;
   void decode(
-      std::span<const uint32_t> ids,
+      std::span<const uint32_t> tokenIds,
       std::string& text,
       const BytePairEncodingDecodeOptions& options = {}
   ) const;
   std::vector<TextOrMarkupToken> decode_parts(
-      std::span<const uint32_t> ids,
+      std::span<const uint32_t> tokenIds,
       const BytePairEncodingDecodeOptions& options = {}
   ) const;
 
@@ -179,10 +186,10 @@ class BytePairEncoding : public TokenizerBase<
       std::vector<uint32_t> symbolIdToTokenId
   );
 
-  void encodeWords(std::string_view text, std::vector<uint32_t>& ids, WordCache* cache) const;
+  void encodeWords(std::string_view text, std::vector<uint32_t>& tokenIds, WordCache* cache) const;
   void encodeParts(
       std::span<const TextOrMarkupToken> parts,
-      std::vector<uint32_t>& ids,
+      std::vector<uint32_t>& tokenIds,
       WordCache* cache
   ) const;
 

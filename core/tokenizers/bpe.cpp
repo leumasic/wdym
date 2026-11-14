@@ -250,7 +250,7 @@ class BytePairEncodingWordEncoder {
         symbolIdToTokenId_(symbolIdToTokenId),
         fallbackTokenId_(fallbackTokenId) {}
 
-  void encode(std::string_view word, std::vector<uint32_t>& ids) {
+  void encode(std::string_view word, std::vector<uint32_t>& tokenIds) {
     encodedSymbolIds_.clear();
 
     splitWordSymbols(word, settings_, [this](std::string_view symbol) {
@@ -268,7 +268,7 @@ class BytePairEncodingWordEncoder {
     // TODO: weird no-arg method...
     mergeSymbolIds();
     for (const auto symbolId : encodedSymbolIds_)
-      ids.push_back(
+      tokenIds.push_back(
           symbolId == UNKNOWN_CHARACTER_SYMBOL_ID ? *fallbackTokenId_ : symbolIdToTokenId_[symbolId]
       );
   }
@@ -694,46 +694,49 @@ BytePairEncoding BytePairEncoding::trainFromTexts(
 }
 
 std::vector<uint32_t> BytePairEncoding::encode(std::string_view text) const {
-  std::vector<uint32_t> ids;
-  encode(text, ids);
-  return ids;
+  std::vector<uint32_t> tokenIds;
+  encode(text, tokenIds);
+  return tokenIds;
 }
 
-void BytePairEncoding::encode(std::string_view text, std::vector<uint32_t>& ids) const {
+void BytePairEncoding::encode(std::string_view text, std::vector<uint32_t>& tokenIds) const {
   std::string normalizationBuffer;
-  encodeWords(normalizer_.normalize(text, normalizationBuffer), ids, nullptr);
+  encodeWords(normalizer_.normalize(text, normalizationBuffer), tokenIds, nullptr);
 }
 
 void BytePairEncoding::encode(
     std::string_view text,
-    std::vector<uint32_t>& ids,
+    std::vector<uint32_t>& tokenIds,
     WordCache& cache
 ) const {
   std::string normalizationBuffer;
-  encodeWords(normalizer_.normalize(text, normalizationBuffer), ids, &cache);
+  encodeWords(normalizer_.normalize(text, normalizationBuffer), tokenIds, &cache);
 }
 
 std::vector<uint32_t> BytePairEncoding::encode_normalized(std::string_view text) const {
-  std::vector<uint32_t> ids;
-  encode_normalized(text, ids);
-  return ids;
-}
-
-void BytePairEncoding::encode_normalized(std::string_view text, std::vector<uint32_t>& ids) const {
-  encodeWords(text, ids, nullptr);
+  std::vector<uint32_t> tokenIds;
+  encode_normalized(text, tokenIds);
+  return tokenIds;
 }
 
 void BytePairEncoding::encode_normalized(
     std::string_view text,
-    std::vector<uint32_t>& ids,
+    std::vector<uint32_t>& tokenIds
+) const {
+  encodeWords(text, tokenIds, nullptr);
+}
+
+void BytePairEncoding::encode_normalized(
+    std::string_view text,
+    std::vector<uint32_t>& tokenIds,
     WordCache& cache
 ) const {
-  encodeWords(text, ids, &cache);
+  encodeWords(text, tokenIds, &cache);
 }
 
 void BytePairEncoding::encodeWords(
     std::string_view text,
-    std::vector<uint32_t>& ids,
+    std::vector<uint32_t>& tokenIds,
     WordCache* cache
 ) const {
   BytePairEncodingWordEncoder wordEncoder(
@@ -745,52 +748,52 @@ void BytePairEncoding::encodeWords(
 
     if (const auto it = wordToWholeWordSymbolId_.find(word, wordHash);
         it != wordToWholeWordSymbolId_.end()) {
-      ids.push_back(symbolIdToTokenId_[it->second]);
+      tokenIds.push_back(symbolIdToTokenId_[it->second]);
       return;
     }
 
     if (cache == nullptr) {
-      wordEncoder.encode(word, ids);
+      wordEncoder.encode(word, tokenIds);
       return;
     }
 
     if (const auto cachedIds = cache->find(word, wordHash.m_mixed_hash); !cachedIds.empty()) {
-      ids.append_range(cachedIds);
+      tokenIds.append_range(cachedIds);
       return;
     }
 
-    const auto wordFirstIdIndex = ids.size();
-    wordEncoder.encode(word, ids);
-    cache->insert(word, wordHash.m_mixed_hash, std::span(ids).subspan(wordFirstIdIndex));
+    const auto wordFirstIdIndex = tokenIds.size();
+    wordEncoder.encode(word, tokenIds);
+    cache->insert(word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstIdIndex));
   });
 }
 
 std::vector<uint32_t> BytePairEncoding::encode_parts(
     std::span<const TextOrMarkupToken> parts
 ) const {
-  std::vector<uint32_t> ids;
-  encode_parts(parts, ids);
-  return ids;
+  std::vector<uint32_t> tokenIds;
+  encode_parts(parts, tokenIds);
+  return tokenIds;
 }
 
 void BytePairEncoding::encode_parts(
     std::span<const TextOrMarkupToken> parts,
-    std::vector<uint32_t>& ids
+    std::vector<uint32_t>& tokenIds
 ) const {
-  encodeParts(parts, ids, nullptr);
+  encodeParts(parts, tokenIds, nullptr);
 }
 
 void BytePairEncoding::encode_parts(
     std::span<const TextOrMarkupToken> parts,
-    std::vector<uint32_t>& ids,
+    std::vector<uint32_t>& tokenIds,
     WordCache& cache
 ) const {
-  encodeParts(parts, ids, &cache);
+  encodeParts(parts, tokenIds, &cache);
 }
 
 void BytePairEncoding::encodeParts(
     std::span<const TextOrMarkupToken> parts,
-    std::vector<uint32_t>& ids,
+    std::vector<uint32_t>& tokenIds,
     WordCache* cache
 ) const {
   for (const TextOrMarkupToken& part : parts) {
@@ -801,30 +804,30 @@ void BytePairEncoding::encodeParts(
             std::format("{:?} is not one of the tokenizer's markup tokens", markupToken->text)
         );
 
-      ids.push_back(*tokenId);
+      tokenIds.push_back(*tokenId);
     } else if (cache != nullptr) {
-      encode(std::get<std::string>(part), ids, *cache);
+      encode(std::get<std::string>(part), tokenIds, *cache);
     } else {
-      encode(std::get<std::string>(part), ids);
+      encode(std::get<std::string>(part), tokenIds);
     }
   }
 }
 
 std::string BytePairEncoding::decode(
-    std::span<const uint32_t> ids,
+    std::span<const uint32_t> tokenIds,
     const BytePairEncodingDecodeOptions& options
 ) const {
   std::string text;
-  decode(ids, text, options);
+  decode(tokenIds, text, options);
   return text;
 }
 
 void BytePairEncoding::decode(
-    std::span<const uint32_t> ids,
+    std::span<const uint32_t> tokenIds,
     std::string& text,
     const BytePairEncodingDecodeOptions& options
 ) const {
-  for (const TextOrMarkupToken& part : decode_parts(ids, options)) {
+  for (const TextOrMarkupToken& part : decode_parts(tokenIds, options)) {
     if (const auto* markupToken = std::get_if<MarkupToken>(&part))
       text.append(markupToken->text);
     else
@@ -833,7 +836,7 @@ void BytePairEncoding::decode(
 }
 
 std::vector<wdym::TextOrMarkupToken> BytePairEncoding::decode_parts(
-    std::span<const uint32_t> ids,
+    std::span<const uint32_t> tokenIds,
     const BytePairEncodingDecodeOptions& options
 ) const {
   std::vector<TextOrMarkupToken> parts;
@@ -857,7 +860,7 @@ std::vector<wdym::TextOrMarkupToken> BytePairEncoding::decode_parts(
     symbolText.clear();
   };
 
-  for (const uint32_t tokenId : ids) {
+  for (const uint32_t tokenId : tokenIds) {
     const auto& token = tokenIdToTokenSource_.at(tokenId);
 
     if (token.isMarkupToken) {

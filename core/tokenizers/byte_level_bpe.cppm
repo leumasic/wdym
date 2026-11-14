@@ -18,7 +18,10 @@ class ByteLevelBPETokenizer
   static ByteLevelBPETokenizer from_bytes(std::span<const std::byte> bytes);
 
   std::vector<std::uint32_t> encode(std::string_view text) const;
-  std::string decode(std::span<const std::uint32_t> ids, const DecodeOptions& options = {}) const;
+  std::string decode(
+      std::span<const std::uint32_t> tokenIds,
+      const DecodeOptions& options = {}
+  ) const;
 
   std::unordered_map<std::string, int> vocabulary;
 

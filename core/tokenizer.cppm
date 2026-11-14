@@ -16,13 +16,13 @@ concept Tokenizer = requires(
     const T& tokenizer,
     std::span<const std::byte> bytes,
     std::string_view text,
-    std::span<const std::uint32_t> ids,
+    std::span<const std::uint32_t> tokenIds,
     const typename T::DecodeOptions& decodeOptions
 ) {
   { tokenizer.to_bytes() } -> std::same_as<std::vector<std::byte>>;
   { T::from_bytes(bytes) } -> std::same_as<T>;
   { tokenizer.encode(text) } -> std::same_as<std::vector<std::uint32_t>>;
-  { tokenizer.decode(ids, decodeOptions) } -> std::same_as<std::string>;
+  { tokenizer.decode(tokenIds, decodeOptions) } -> std::same_as<std::string>;
 };
 
 template <Tokenizer T>

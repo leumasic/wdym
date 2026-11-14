@@ -34,7 +34,7 @@ std::vector<std::uint32_t> ByteLevelBPETokenizer::encode(std::string_view text) 
 }
 
 std::string ByteLevelBPETokenizer::decode(
-    std::span<const std::uint32_t> ids,
+    std::span<const std::uint32_t> tokenIds,
     const DecodeOptions& options
 ) const {
   // TODO
