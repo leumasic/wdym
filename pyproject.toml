@@ -33,7 +33,7 @@ wheel.py-api = "cp312"
 # https://cmake.org/cmake/help/latest/release/4.5.html#languages
 cmake.version = ">=4.5.0rc2"
 ninja.version = ">=1.11"
-sdist.exclude = [".dev/", ".github/", ".clang-format", "tests/"]
+sdist.exclude = [".dev/", ".github/", ".clang-format", ".clang-tidy", "tests/"]
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"

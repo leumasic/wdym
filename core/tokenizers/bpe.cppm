@@ -23,40 +23,40 @@ struct ByteFallback {
 };
 
 struct BytePairEncodingSettings {
-  std::vector<std::string> markup_tokens = {};
+  std::vector<std::string> markupTokens = {};
 
-  std::string word_delimiter = " ";
+  std::string wordDelimiter = " ";
 
   // Prepended or adjoined to the start of each word
-  std::string word_prefix = "▁";
+  std::string wordPrefix = "▁";
   // Appended or adjoined to the end of each word
-  std::string word_suffix = "";
+  std::string wordSuffix = "";
   // Whether to adjoin the prefix to the first symbol of each word. If false,
   // it is prepended as a separate symbol
-  bool adjoin_prefix = false;
+  bool adjoinPrefix = false;
   // Whether to adjoin the suffix to the last symbol of each word. If false, it
   // is appended as a separate symbol
-  bool adjoin_suffix = true;
+  bool adjoinSuffix = true;
 
-  std::variant<std::monostate, ByteFallback, std::string, MarkupToken> unknown_character_fallback =
+  std::variant<std::monostate, ByteFallback, std::string, MarkupToken> unknownCharacterFallback =
       {};
 
   bool operator==(const BytePairEncodingSettings&) const = default;
 };
 
 struct BytePairEncodingTrainOptions {
-  int max_vocabulary_size = 8000;
+  int maxVocabularySize = 8000;
   BytePairEncodingSettings settings = {};
 };
 
 using BytePairEncodingEncodeOptions = std::monostate;
 
 struct BytePairEncodingDecodeOptions {
-  bool remove_leading_word_prefix = true;
-  bool remove_trailing_word_suffix = true;
+  bool removeLeadingWordPrefix = true;
+  bool removeTrailingWordSuffix = true;
   // Replaces word suffix followed by word prefix, with word delimiter
-  bool restore_word_delimiters = true;
-  std::string invalid_utf8_replacement = "�";
+  bool restoreWordDelimiters = true;
+  std::string invalidUtf8Replacement = "�";
 
   bool operator==(const BytePairEncodingDecodeOptions&) const = default;
 };
@@ -115,30 +115,28 @@ class BytePairEncoding : public TokenizerBase<
     std::vector<Set> sets_;
   };
 
-  std::vector<std::byte> to_bytes() const;
-  static BytePairEncoding from_bytes(std::span<const std::byte> bytes);
+  std::vector<std::byte> toBytes() const;
+  static BytePairEncoding fromBytes(std::span<const std::byte> bytes);
 
   std::vector<uint32_t> encode(std::string_view text) const;
-  void encode(std::string_view text, std::vector<uint32_t>& tokenIds) const;
-  void encode(std::string_view text, std::vector<uint32_t>& tokenIds, WordCache& cache) const;
-
-  std::vector<uint32_t> encode_normalized(std::string_view text) const;
-  void encode_normalized(std::string_view text, std::vector<uint32_t>& tokenIds) const;
-  void encode_normalized(
+  void encode(
       std::string_view text,
       std::vector<uint32_t>& tokenIds,
-      WordCache& cache
+      std::optional<WordCache&> cache = std::nullopt
   ) const;
 
-  std::vector<uint32_t> encode_parts(std::span<const TextOrMarkupToken> parts) const;
-  void encode_parts(
-      std::span<const TextOrMarkupToken> parts,
-      std::vector<uint32_t>& tokenIds
+  std::vector<uint32_t> encodeNormalized(std::string_view text) const;
+  void encodeNormalized(
+      std::string_view text,
+      std::vector<uint32_t>& tokenIds,
+      std::optional<WordCache&> cache = std::nullopt
   ) const;
-  void encode_parts(
+
+  std::vector<uint32_t> encodeParts(std::span<const TextOrMarkupToken> parts) const;
+  void encodeParts(
       std::span<const TextOrMarkupToken> parts,
       std::vector<uint32_t>& tokenIds,
-      WordCache& cache
+      std::optional<WordCache&> cache = std::nullopt
   ) const;
 
   std::string decode(
@@ -150,13 +148,13 @@ class BytePairEncoding : public TokenizerBase<
       std::string& text,
       const BytePairEncodingDecodeOptions& options = {}
   ) const;
-  std::vector<TextOrMarkupToken> decode_parts(
+  std::vector<TextOrMarkupToken> decodeParts(
       std::span<const uint32_t> tokenIds,
       const BytePairEncodingDecodeOptions& options = {}
   ) const;
 
-  std::optional<uint32_t> token_to_id(std::string_view token) const;
-  std::optional<uint32_t> markup_token_to_id(std::string_view token) const;
+  std::optional<uint32_t> tokenToId(std::string_view token) const;
+  std::optional<uint32_t> markupTokenToId(std::string_view token) const;
 
   bool operator==(const BytePairEncoding& other) const {
     return settings_ == other.settings_ &&
@@ -170,13 +168,6 @@ class BytePairEncoding : public TokenizerBase<
   std::vector<std::pair<std::string, std::string>> merges() const;
 
  private:
-  // TODO: use camel case for private members
-  static BytePairEncoding trainFromTexts(
-      TextStream texts,
-      const TrainOptions& options,
-      Normalizer normalizer
-  );
-
   explicit BytePairEncoding(
       Normalizer normalizer,
       BytePairEncodingSettings settings,
@@ -186,12 +177,11 @@ class BytePairEncoding : public TokenizerBase<
       std::vector<uint32_t> symbolIdToTokenId
   );
 
-  void encodeWords(std::string_view text, std::vector<uint32_t>& tokenIds, WordCache* cache) const;
-  void encodeParts(
-      std::span<const TextOrMarkupToken> parts,
-      std::vector<uint32_t>& tokenIds,
-      WordCache* cache
-  ) const;
+  static BytePairEncoding trainFromTexts(
+      TextStream texts,
+      const TrainOptions& options,
+      Normalizer normalizer
+  );
 
   std::string decodeSymbolText(
       std::string_view symbolText,
@@ -202,9 +192,6 @@ class BytePairEncoding : public TokenizerBase<
   ) const;
 
   std::optional<uint32_t> findFallbackTokenId() const;
-
-  // NOTE: I'm really not a fan of pimpl. My general philosophy is that code shouldn't be contorted
-  // for tests or builds
 
   const BytePairEncodingSettings settings_;
 
@@ -229,5 +216,5 @@ class BytePairEncoding : public TokenizerBase<
 
 namespace wdym {
 template <>
-constexpr std::string_view tokenizer_name<BytePairEncoding> = "BytePairEncoding";
+constexpr std::string_view tokenizerName<BytePairEncoding> = "BytePairEncoding";
 }  // namespace wdym

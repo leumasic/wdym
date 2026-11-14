@@ -91,7 +91,7 @@ target_sources(wdym PUBLIC
 target_sources(wdym PRIVATE
   FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
     core/tokenizer_file.cppm)
-target_compile_features(wdym PUBLIC cxx_std_23)
+target_compile_features(wdym PUBLIC cxx_std_26)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
 target_link_libraries(wdym PRIVATE $<BUILD_INTERFACE:unordered_dense::unordered_dense>)

@@ -19,14 +19,14 @@ concept Tokenizer = requires(
     std::span<const std::uint32_t> tokenIds,
     const typename T::DecodeOptions& decodeOptions
 ) {
-  { tokenizer.to_bytes() } -> std::same_as<std::vector<std::byte>>;
-  { T::from_bytes(bytes) } -> std::same_as<T>;
+  { tokenizer.toBytes() } -> std::same_as<std::vector<std::byte>>;
+  { T::fromBytes(bytes) } -> std::same_as<T>;
   { tokenizer.encode(text) } -> std::same_as<std::vector<std::uint32_t>>;
   { tokenizer.decode(tokenIds, decodeOptions) } -> std::same_as<std::string>;
 };
 
 template <Tokenizer T>
-inline constexpr std::string_view tokenizer_name = {};
+inline constexpr std::string_view tokenizerName = {};
 
 template <
     typename Derived,
@@ -61,15 +61,15 @@ class TokenizerBase {
     return train(streamTexts(texts), options, normalization);
   }
 
-  static Derived train_from_files(
+  static Derived trainFromFiles(
       const std::filesystem::path& file,
       const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return train_from_files(std::span(&file, 1), options, normalization);
+    return trainFromFiles(std::span(&file, 1), options, normalization);
   }
 
-  static Derived train_from_files(
+  static Derived trainFromFiles(
       std::initializer_list<std::filesystem::path> files,
       const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
@@ -80,7 +80,7 @@ class TokenizerBase {
   template <std::ranges::input_range Files>
     requires std::convertible_to<std::ranges::range_reference_t<Files>, std::filesystem::path> &&
              (!std::same_as<std::remove_cvref_t<Files>, std::filesystem::path>)
-  static Derived train_from_files(
+  static Derived trainFromFiles(
       Files&& files,
       const TrainOptionsType& options = {},
       const NormalizationSettings& normalization = {}
@@ -89,7 +89,7 @@ class TokenizerBase {
   }
 
   void save(const std::filesystem::path& path) const {
-    const std::vector<std::byte> bytes = static_cast<const Derived&>(*this).to_bytes();
+    const std::vector<std::byte> bytes = static_cast<const Derived&>(*this).toBytes();
 
     std::ofstream file(path, std::ios::binary);
     file.write(
@@ -118,7 +118,7 @@ class TokenizerBase {
           "could not read tokenizer file", path, std::error_code(errno, std::generic_category())
       );
 
-    return Derived::from_bytes(bytes);
+    return Derived::fromBytes(bytes);
   }
 
   std::string normalize(std::string_view text) const {

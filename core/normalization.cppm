@@ -24,7 +24,7 @@ struct KeepInvalidUtf8 {
 using InvalidUtf8Fallback = std::variant<std::string, KeepInvalidUtf8>;
 
 struct NormalizationSettings {
-  InvalidUtf8Fallback invalid_utf8_fallback = "�";
+  InvalidUtf8Fallback invalidUtf8Fallback = "�";
   std::vector<NormalizationStep> steps = {};
 
   bool operator==(const NormalizationSettings&) const = default;

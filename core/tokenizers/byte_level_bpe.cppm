@@ -6,7 +6,7 @@ import :tokenizer;
 
 export namespace wdym {
 struct ByteLevelBPETrainOptions {
-  int max_vocabulary_size = 8000;
+  int maxVocabularySize = 8000;
 };
 
 class ByteLevelBPETokenizer
@@ -14,8 +14,8 @@ class ByteLevelBPETokenizer
   friend TokenizerBase;
 
  public:
-  std::vector<std::byte> to_bytes() const;
-  static ByteLevelBPETokenizer from_bytes(std::span<const std::byte> bytes);
+  std::vector<std::byte> toBytes() const;
+  static ByteLevelBPETokenizer fromBytes(std::span<const std::byte> bytes);
 
   std::vector<std::uint32_t> encode(std::string_view text) const;
   std::string decode(
@@ -38,5 +38,5 @@ class ByteLevelBPETokenizer
 
 namespace wdym {
 template <>
-constexpr std::string_view tokenizer_name<ByteLevelBPETokenizer> = "ByteLevelBPETokenizer";
+constexpr std::string_view tokenizerName<ByteLevelBPETokenizer> = "ByteLevelBPETokenizer";
 }  // namespace wdym

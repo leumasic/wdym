@@ -1,18 +1,23 @@
-FROM nvcr.io/nvidia/pytorch:26.09-py3
+FROM docker.io/library/fedora:44
 
-RUN apt-get update && apt-get install -y software-properties-common \
-    && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
-    && apt-get update && apt-get install -y \
+RUN dnf install -y \
     curl \
     git \
-    build-essential \
-    g++-15 \
+    gcc \
+    gcc-c++ \
+    make \
+    ninja-build \
+    tar \
+    gzip \
+    findutils \
+    which \
+    python3-devel \
     ripgrep \
     fd-find \
-    && rm -rf /var/lib/apt/lists/*
+    && dnf clean all
 
-ENV CC=gcc-15
-ENV CXX=g++-15
+ENV CC=gcc
+ENV CXX=g++
 
 RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
     && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \

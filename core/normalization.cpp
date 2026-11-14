@@ -163,7 +163,7 @@ std::vector<wdym::CompiledNormalizationStep> compileNormalizationSteps(
 }  // namespace
 
 wdym::Normalizer::Normalizer(const NormalizationSettings& settings)
-    : Normalizer(compileNormalizationSteps(settings.steps), settings.invalid_utf8_fallback) {}
+    : Normalizer(compileNormalizationSteps(settings.steps), settings.invalidUtf8Fallback) {}
 
 wdym::Normalizer::Normalizer(
     std::vector<CompiledNormalizationStep> compiledSteps,
@@ -173,7 +173,7 @@ wdym::Normalizer::Normalizer(
   if (const auto* replacement = std::get_if<std::string>(&invalidUtf8Fallback);
       replacement != nullptr && !isValidUtf8(*replacement))
     throw std::invalid_argument(
-        std::format("invalid_utf8_fallback {:?} is not valid UTF-8", *replacement)
+        std::format("invalidUtf8Fallback {:?} is not valid UTF-8", *replacement)
     );
 
   for (const CompiledNormalizationStep& step : steps) {
