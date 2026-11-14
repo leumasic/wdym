@@ -4,14 +4,7 @@
 #include <nanobind/stl/string_view.h>
 #include <nanobind/stl/vector.h>
 
-#include <exception>
-#include <filesystem>
-#include <generator>
-#include <span>
-#include <string_view>
-#include <utility>
-#include <vector>
-
+import std;
 import wdym;
 
 namespace nb = nanobind;
@@ -24,11 +17,11 @@ using wdym::ByteLevelBPETrainOptions;
 template <typename Options, typename Value>
 struct TrainOption {
   const char* name;
-  Value Options::*field;
+  Value Options::* field;
 };
 
 template <typename Options, typename Value>
-TrainOption<Options, Value> option(const char* name, Value Options::*field) {
+TrainOption<Options, Value> option(const char* name, Value Options::* field) {
   return {name, field};
 }
 
@@ -42,7 +35,7 @@ class GilSafeObject {
   nb::object object;
 };
 
-wdym::TextStream stream_python_texts(nb::handle iterator) {
+wdym::TextStream streamPythonTexts(nb::handle iterator) {
   GilSafeObject current;
   while (true) {
     std::string_view text;
@@ -78,18 +71,22 @@ void bind_train(nb::class_<T>& cls, TrainOption<typename T::TrainOptions, Values
          [make_options](const fs::path& input, Values... values) {
            const Options trainOptions = make_options(values...);
            nb::gil_scoped_release release;
-           return T::train(std::span(&input, 1), trainOptions);
+           return T::train_from_files(input, trainOptions);
          },
-         nb::kw_only(), "input"_a, (nb::arg(options.name) = defaults.*(options.field))...
+         nb::kw_only(),
+         "input"_a,
+         (nb::arg(options.name) = defaults.*(options.field))...
   )
       .def_static(
           "train",
           [make_options](const std::vector<fs::path>& input, Values... values) {
             const Options trainOptions = make_options(values...);
             nb::gil_scoped_release release;
-            return T::train(input, trainOptions);
+            return T::train_from_files(input, trainOptions);
           },
-          nb::kw_only(), "input"_a, (nb::arg(options.name) = defaults.*(options.field))...
+          nb::kw_only(),
+          "input"_a,
+          (nb::arg(options.name) = defaults.*(options.field))...
       )
       .def_static(
           "train",
@@ -97,9 +94,10 @@ void bind_train(nb::class_<T>& cls, TrainOption<typename T::TrainOptions, Values
             const Options trainOptions = make_options(values...);
             const nb::object iterator = nb::iter(sentence_iterator);
             nb::gil_scoped_release release;
-            return T::train(stream_python_texts(iterator), trainOptions);
+            return T::train(streamPythonTexts(iterator), trainOptions);
           },
-          nb::kw_only(), "sentence_iterator"_a,
+          nb::kw_only(),
+          "sentence_iterator"_a,
           (nb::arg(options.name) = defaults.*(options.field))...
       );
 }
@@ -110,7 +108,7 @@ void bind_tokenizer(nb::module_& m, TrainOption<typename T::TrainOptions, Values
       !wdym::tokenizer_name<T>.empty(), "specialize wdym::tokenizer_name for this tokenizer"
   );
   nb::class_<T> cls(m, wdym::tokenizer_name<T>.data());
-  cls.def_static("from_file", &T::from_file, "path"_a).def("save", &T::save, "path"_a);
+  cls.def_static("load", &T::load, "path"_a).def("save", &T::save, "path"_a);
   bind_train(cls, options...);
 }
 
@@ -119,14 +117,14 @@ NB_MODULE(wdym_ext, m) {
     try {
       std::rethrow_exception(exception);
     } catch (const std::filesystem::filesystem_error& error) {
-      const nb::object os_error = nb::handle(PyExc_OSError)(
+      const nb::object osError = nb::handle(PyExc_OSError)(
           error.code().value(), error.code().message(), error.path1().string()
       );
-      PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(os_error.ptr())), os_error.ptr());
+      PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(osError.ptr())), osError.ptr());
     }
   });
 
   bind_tokenizer<ByteLevelBPETokenizer>(
-      m, option("vocab_size", &ByteLevelBPETrainOptions::vocab_size)
+      m, option("max_vocabulary_size", &ByteLevelBPETrainOptions::max_vocabulary_size)
   );
 }
