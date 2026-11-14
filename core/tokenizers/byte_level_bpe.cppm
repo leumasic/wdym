@@ -23,6 +23,9 @@ class ByteLevelBPETokenizer
       const DecodeOptions& options = {}
   ) const;
 
+  std::optional<std::uint32_t> tokenToId(std::string_view token) const;
+  std::optional<std::uint32_t> markupTokenToId(std::string_view token) const;
+
   std::unordered_map<std::string, int> vocabulary;
 
  private:

@@ -41,3 +41,13 @@ std::string ByteLevelBPETokenizer::decode(
   // TODO
   return {};
 }
+
+std::optional<std::uint32_t> ByteLevelBPETokenizer::tokenToId(std::string_view token) const {
+  // TODO
+  return std::nullopt;
+}
+
+std::optional<std::uint32_t> ByteLevelBPETokenizer::markupTokenToId(std::string_view token) const {
+  // TODO
+  return std::nullopt;
+}

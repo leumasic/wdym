@@ -23,6 +23,8 @@ concept Tokenizer = requires(
   { T::fromBytes(bytes) } -> std::same_as<T>;
   { tokenizer.encode(text) } -> std::same_as<std::vector<std::uint32_t>>;
   { tokenizer.decode(tokenIds, decodeOptions) } -> std::same_as<std::string>;
+  { tokenizer.tokenToId(text) } -> std::same_as<std::optional<std::uint32_t>>;
+  { tokenizer.markupTokenToId(text) } -> std::same_as<std::optional<std::uint32_t>>;
 };
 
 template <
