@@ -31,6 +31,7 @@ inline constexpr std::string_view tokenizerName = {};
 template <
     typename Derived,
     typename TrainOptionsType = std::monostate,
+    typename SettingsType = std::monostate,
     typename EncodeOptionsType = std::monostate,
     typename DecodeOptionsType = std::monostate>
 class TokenizerBase {
@@ -40,15 +41,17 @@ class TokenizerBase {
 
  public:
   using TrainOptions = TrainOptionsType;
+  using Settings = SettingsType;
   using EncodeOptions = EncodeOptionsType;
   using DecodeOptions = DecodeOptionsType;
 
   static Derived train(
       TextStream texts,
       const TrainOptionsType& options = {},
+      const SettingsType& settings = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return Derived::trainFromTexts(std::move(texts), options, Normalizer(normalization));
+    return Derived::trainFromTexts(std::move(texts), options, settings, Normalizer(normalization));
   }
 
   template <std::ranges::input_range Texts>
@@ -56,25 +59,28 @@ class TokenizerBase {
   static Derived train(
       Texts&& texts,
       const TrainOptionsType& options = {},
+      const SettingsType& settings = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return train(streamTexts(texts), options, normalization);
+    return train(streamTexts(texts), options, settings, normalization);
   }
 
   static Derived trainFromFiles(
       const std::filesystem::path& file,
       const TrainOptionsType& options = {},
+      const SettingsType& settings = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return trainFromFiles(std::span(&file, 1), options, normalization);
+    return trainFromFiles(std::span(&file, 1), options, settings, normalization);
   }
 
   static Derived trainFromFiles(
       std::initializer_list<std::filesystem::path> files,
       const TrainOptionsType& options = {},
+      const SettingsType& settings = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return train(streamFileLines(files), options, normalization);
+    return train(streamFileLines(files), options, settings, normalization);
   }
 
   template <std::ranges::input_range Files>
@@ -83,9 +89,10 @@ class TokenizerBase {
   static Derived trainFromFiles(
       Files&& files,
       const TrainOptionsType& options = {},
+      const SettingsType& settings = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return train(streamFileLines(files), options, normalization);
+    return train(streamFileLines(files), options, settings, normalization);
   }
 
   void save(const std::filesystem::path& path) const {
@@ -160,11 +167,17 @@ class TokenizerBase {
   explicit TokenizerBase(Normalizer normalizer) : normalizer_(std::move(normalizer)) {
     static_assert(Tokenizer<Derived>, "tokenizers must implement the Tokenizer concept");
     static_assert(
-        requires(TextStream texts, const TrainOptionsType& options, Normalizer normalizer) {
+        requires(
+            TextStream texts,
+            const TrainOptionsType& options,
+            const SettingsType& settings,
+            Normalizer normalizer
+        ) {
           {
-            Derived::trainFromTexts(std::move(texts), options, std::move(normalizer))
+            Derived::trainFromTexts(std::move(texts), options, settings, std::move(normalizer))
           } -> std::same_as<Derived>;
-        }, "tokenizers must implement trainFromTexts"
+        },
+        "tokenizers must implement trainFromTexts"
     );
   };
 };

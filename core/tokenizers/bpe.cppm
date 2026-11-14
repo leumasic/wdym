@@ -46,7 +46,6 @@ struct BytePairEncodingSettings {
 
 struct BytePairEncodingTrainOptions {
   int maxVocabularySize = 8000;
-  BytePairEncodingSettings settings = {};
 };
 
 using BytePairEncodingEncodeOptions = std::monostate;
@@ -64,6 +63,7 @@ struct BytePairEncodingDecodeOptions {
 class BytePairEncoding : public TokenizerBase<
                              BytePairEncoding,
                              BytePairEncodingTrainOptions,
+                             BytePairEncodingSettings,
                              BytePairEncodingEncodeOptions,
                              BytePairEncodingDecodeOptions> {
   friend TokenizerBase;
@@ -180,6 +180,7 @@ class BytePairEncoding : public TokenizerBase<
   static BytePairEncoding trainFromTexts(
       TextStream texts,
       const TrainOptions& options,
+      const Settings& settings,
       Normalizer normalizer
   );
 

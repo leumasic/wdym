@@ -642,37 +642,37 @@ void BytePairEncoding::WordCache::insert(
 BytePairEncoding BytePairEncoding::trainFromTexts(
     TextStream texts,
     const TrainOptions& options,
+    const Settings& settings,
     Normalizer normalizer
 ) {
-  const auto settings = getValidatedSettings(options.settings);
+  const auto validatedSettings = getValidatedSettings(settings);
   assertInvalidUtf8IsReplaced(normalizer);
 
-  BytePairEncodingTrainer trainer(settings);
+  BytePairEncodingTrainer trainer(validatedSettings);
+
+  const auto vocabularySize = [&] {
+    return trainer.symbols.size() + validatedSettings.markupTokens.size();
+  };
 
   // MEMORY OPTIMIZATION: separate scope to free up wordToCount once done with it
   {
-    auto wordToCount = getWordToCount(std::move(texts), normalizer, settings);
+    auto wordToCount = getWordToCount(std::move(texts), normalizer, validatedSettings);
 
     trainer.registerAlphabet(wordToCount);
 
-    const auto minimumVocabularySize = trainer.symbols.size() + settings.markupTokens.size();
-    if (std::cmp_greater(minimumVocabularySize, options.maxVocabularySize))
+    if (std::cmp_greater(vocabularySize(), options.maxVocabularySize))
       throw std::invalid_argument(
           std::format(
               "maxVocabularySize {} is too small: the corpus and markup tokens need at least {}",
               options.maxVocabularySize,
-              minimumVocabularySize
+              vocabularySize()
           )
       );
 
     trainer.buildInitialPairs(wordToCount);
   }
 
-  while (
-      std::cmp_less(
-          trainer.symbols.size() + settings.markupTokens.size(), options.maxVocabularySize
-      )
-  ) {
+  while (std::cmp_less(vocabularySize(), options.maxVocabularySize)) {
     auto mostFrequentPairKey = trainer.popMostFrequentPair();
     if (!mostFrequentPairKey.has_value())
       break;
@@ -680,12 +680,12 @@ BytePairEncoding BytePairEncoding::trainFromTexts(
     trainer.mergePair(mostFrequentPairKey.value());
   }
 
-  auto markupTokenToTokenId = buildMarkupTokenToTokenId(settings, trainer.symbols);
+  auto markupTokenToTokenId = buildMarkupTokenToTokenId(validatedSettings, trainer.symbols);
   auto symbolIdToTokenId = buildSymbolIdToTokenId(trainer.symbols);
 
   return BytePairEncoding(
       std::move(normalizer),
-      settings,
+      validatedSettings,
       std::move(trainer.symbols),
       std::move(trainer.pairKeyToMergedSymbolId),
       std::move(markupTokenToTokenId),

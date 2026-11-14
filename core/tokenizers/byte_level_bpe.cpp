@@ -10,6 +10,7 @@ ByteLevelBPETokenizer::ByteLevelBPETokenizer(Normalizer normalizer)
 ByteLevelBPETokenizer ByteLevelBPETokenizer::trainFromTexts(
     TextStream texts,
     const TrainOptions& options,
+    const Settings& settings,
     Normalizer normalizer
 ) {
   for (const std::string_view text : texts) {

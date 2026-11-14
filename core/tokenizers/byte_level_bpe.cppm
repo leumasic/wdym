@@ -29,6 +29,7 @@ class ByteLevelBPETokenizer
   static ByteLevelBPETokenizer trainFromTexts(
       TextStream texts,
       const TrainOptions& options,
+      const Settings& settings,
       Normalizer normalizer
   );
 
