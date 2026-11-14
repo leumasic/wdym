@@ -112,17 +112,39 @@ void bind_tokenizer(nb::module_& m, TrainOption<typename T::TrainOptions, Values
   bind_train(cls, options...);
 }
 
+void bind_normalizer(nb::module_& m) {
+  nb::class_<wdym::ReplacementRule>(m, "ReplacementRule")
+      .def(nb::init<>())
+      .def_rw("input", &wdym::ReplacementRule::input)
+      .def_rw("output", &wdym::ReplacementRule::output);
+
+  nb::class_<wdym::NormalizationStep>(m, "NormalizationStep")
+      .def(nb::init<>())
+      .def_rw("name", &wdym::NormalizationStep::name)
+      .def_rw("rules", &wdym::NormalizationStep::rules);
+
+  nb::class_<wdym::KeepInvalidUtf8>(m, "KeepInvalidUtf8").def(nb::init<>());
+
+  nb::class_<wdym::NormalizationSettings>(m, "NormalizationSettings")
+      .def(nb::init<>())
+      .def_rw("invalid_utf8_fallback", &wdym::NormalizationSettings::invalid_utf8_fallback)
+      .def_rw("steps", &wdym::NormalizationSettings::steps);
+}
+
 NB_MODULE(wdym_ext, m) {
+  // See https://docs.python.org/3.15/c-api/exceptions.html for Python C exception APIs
   nb::register_exception_translator([](const std::exception_ptr& exception, void*) {
     try {
       std::rethrow_exception(exception);
     } catch (const std::filesystem::filesystem_error& error) {
-      const nb::object osError = nb::handle(PyExc_OSError)(
+      nb::object osError = nb::handle(PyExc_OSError)(
           error.code().value(), error.code().message(), error.path1().string()
       );
-      PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(osError.ptr())), osError.ptr());
+      PyErr_SetRaisedException(osError.release().ptr());
     }
   });
+
+  bind_normalizer(m);
 
   bind_tokenizer<ByteLevelBPETokenizer>(
       m, option("max_vocabulary_size", &ByteLevelBPETrainOptions::max_vocabulary_size)
