@@ -595,7 +595,7 @@ std::span<const uint32_t> BytePairEncoding::WordCache::find(std::string_view wor
 
   for (size_t way = 0; way < set.entries.size(); ++way) {
     auto& entry = set.entries[way];
-    if (entry.symbolIdCount == 0 ||
+    if (entry.tokenIdCount == 0 ||
         entry.wordSize != word.size() ||
         !std::ranges::equal(std::span(entry.word).first(word.size()), word))
       continue;
@@ -603,7 +603,7 @@ std::span<const uint32_t> BytePairEncoding::WordCache::find(std::string_view wor
     entry.isMostRecentlyUsed = true;
     set.entries[1 - way].isMostRecentlyUsed = false;
 
-    return std::span(entry.symbolIds).first(entry.symbolIdCount);
+    return std::span(entry.tokenIds).first(entry.tokenIdCount);
   }
 
   return {};
@@ -612,29 +612,29 @@ std::span<const uint32_t> BytePairEncoding::WordCache::find(std::string_view wor
 void BytePairEncoding::WordCache::insert(
     std::string_view word,
     uint64_t hash,
-    std::span<const uint32_t> symbolIds
+    std::span<const uint32_t> tokenIds
 ) {
   static_assert(WAYS_PER_SET == 2);
 
-  if (word.size() > MAX_WORD_SIZE || symbolIds.empty() || symbolIds.size() > MAX_SYMBOL_ID_COUNT)
+  if (word.size() > MAX_WORD_SIZE || tokenIds.empty() || tokenIds.size() > MAX_TOKEN_ID_COUNT)
     return;
 
   auto& set = getSet(hash);
 
   const auto& firstEntry = set.entries[0];
   const auto& secondEntry = set.entries[1];
-  const size_t insertionWay = firstEntry.symbolIdCount == 0    ? 0
-                              : secondEntry.symbolIdCount == 0 ? 1
-                              : firstEntry.isMostRecentlyUsed  ? 1
-                                                               : 0;
+  const size_t insertionWay = firstEntry.tokenIdCount == 0    ? 0
+                              : secondEntry.tokenIdCount == 0 ? 1
+                              : firstEntry.isMostRecentlyUsed ? 1
+                                                              : 0;
 
   auto& insertionEntry = set.entries[insertionWay];
   insertionEntry.wordSize = static_cast<uint8_t>(word.size());
-  insertionEntry.symbolIdCount = static_cast<uint8_t>(symbolIds.size());
+  insertionEntry.tokenIdCount = static_cast<uint8_t>(tokenIds.size());
   insertionEntry.isMostRecentlyUsed = true;
 
   std::ranges::copy(word, insertionEntry.word.begin());
-  std::ranges::copy(symbolIds, insertionEntry.symbolIds.begin());
+  std::ranges::copy(tokenIds, insertionEntry.tokenIds.begin());
 
   set.entries[1 - insertionWay].isMostRecentlyUsed = false;
 }
@@ -757,14 +757,15 @@ void BytePairEncoding::encodeWords(
       return;
     }
 
-    if (const auto cachedIds = cache->find(word, wordHash.m_mixed_hash); !cachedIds.empty()) {
-      tokenIds.append_range(cachedIds);
+    if (const auto cachedTokenIds = cache->find(word, wordHash.m_mixed_hash);
+        !cachedTokenIds.empty()) {
+      tokenIds.append_range(cachedTokenIds);
       return;
     }
 
-    const auto wordFirstIdIndex = tokenIds.size();
+    const auto wordFirstTokenIdIndex = tokenIds.size();
     wordEncoder.encode(word, tokenIds);
-    cache->insert(word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstIdIndex));
+    cache->insert(word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstTokenIdIndex));
   });
 }
 

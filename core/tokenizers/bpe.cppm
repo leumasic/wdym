@@ -69,7 +69,7 @@ class BytePairEncoding : public TokenizerBase<
   friend TokenizerBase;
 
  public:
-  // Fixed-size cache to speed up encoding by storing symbol IDs of words that
+  // Fixed-size cache to speed up encoding by storing token IDs of words that
   // don't encode to a single whole-word symbol. The cache should not be shared
   // between tokenizers that encode words differently. Not thread-safe
   class WordCache {
@@ -85,7 +85,7 @@ class BytePairEncoding : public TokenizerBase<
     // Cache is 2-way set-associative
     static constexpr size_t WAYS_PER_SET = 2;
     static constexpr size_t MAX_WORD_SIZE = 13;
-    static constexpr size_t MAX_SYMBOL_ID_COUNT = 4;
+    static constexpr size_t MAX_TOKEN_ID_COUNT = 4;
 
     struct Entry {
       bool isMostRecentlyUsed = false;
@@ -93,8 +93,8 @@ class BytePairEncoding : public TokenizerBase<
       uint8_t wordSize = 0;
       std::array<char, MAX_WORD_SIZE> word = {};
 
-      uint8_t symbolIdCount = 0;
-      std::array<uint32_t, MAX_SYMBOL_ID_COUNT> symbolIds = {};
+      uint8_t tokenIdCount = 0;
+      std::array<uint32_t, MAX_TOKEN_ID_COUNT> tokenIds = {};
     };
     static_assert(sizeof(Entry) == 32);
 
@@ -110,7 +110,7 @@ class BytePairEncoding : public TokenizerBase<
     inline Set& getSet(uint64_t hash) { return sets_[hash & (sets_.size() - 1)]; }
 
     std::span<const uint32_t> find(std::string_view word, uint64_t hash);
-    void insert(std::string_view word, uint64_t hash, std::span<const uint32_t> symbolIds);
+    void insert(std::string_view word, uint64_t hash, std::span<const uint32_t> tokenIds);
 
     std::vector<Set> sets_;
   };
