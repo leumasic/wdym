@@ -158,7 +158,7 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
   friend TokenizerBase;
 
   // TODO: use camel case for private members
-  static BytePairEncoding train_from_texts(
+  static BytePairEncoding trainFromTexts(
       TextStream texts,
       const TrainOptions& options,
       Normalizer normalizer

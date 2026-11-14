@@ -639,7 +639,7 @@ void BytePairEncoding::WordCache::insert(
   set.entries[1 - insertionWay].isMostRecentlyUsed = false;
 }
 
-BytePairEncoding BytePairEncoding::train_from_texts(
+BytePairEncoding BytePairEncoding::trainFromTexts(
     TextStream texts,
     const TrainOptions& options,
     Normalizer normalizer

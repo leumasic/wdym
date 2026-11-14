@@ -7,7 +7,7 @@ using wdym::ByteLevelBPETokenizer;
 ByteLevelBPETokenizer::ByteLevelBPETokenizer(Normalizer normalizer)
     : TokenizerBase(std::move(normalizer)) {}
 
-ByteLevelBPETokenizer ByteLevelBPETokenizer::train_from_texts(
+ByteLevelBPETokenizer ByteLevelBPETokenizer::trainFromTexts(
     TextStream texts,
     const TrainOptions& options,
     Normalizer normalizer

@@ -30,7 +30,7 @@ class TokenizerBase {
       const Options& options = {},
       const NormalizationSettings& normalization = {}
   ) {
-    return Derived::train_from_texts(std::move(texts), options, Normalizer(normalization));
+    return Derived::trainFromTexts(std::move(texts), options, Normalizer(normalization));
   }
 
   template <std::ranges::input_range Texts>
@@ -144,9 +144,9 @@ class TokenizerBase {
     static_assert(
         requires(TextStream texts, const Options& options, Normalizer normalizer) {
           {
-            Derived::train_from_texts(std::move(texts), options, std::move(normalizer))
+            Derived::trainFromTexts(std::move(texts), options, std::move(normalizer))
           } -> std::same_as<Derived>;
-        }, "tokenizers must implement train_from_texts"
+        }, "tokenizers must implement trainFromTexts"
     );
   };
   // Prevents inheritance mistakes like

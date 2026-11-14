@@ -23,7 +23,7 @@ class ByteLevelBPETokenizer
  private:
   friend TokenizerBase;
 
-  static ByteLevelBPETokenizer train_from_texts(
+  static ByteLevelBPETokenizer trainFromTexts(
       TextStream texts,
       const TrainOptions& options,
       Normalizer normalizer
