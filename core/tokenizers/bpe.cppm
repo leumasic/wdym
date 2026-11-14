@@ -19,8 +19,6 @@ struct TokenSource {
 
 export namespace wdym {
 struct ByteFallback {
-  std::string invalid_utf8_replacement = "�";
-
   bool operator==(const ByteFallback&) const = default;
 };
 
@@ -56,6 +54,7 @@ struct BytePairEncodingDecodeOptions {
   bool remove_trailing_word_suffix = true;
   // Replaces word suffix followed by word prefix, with word delimiter
   bool restore_word_delimiters = true;
+  std::string invalid_utf8_replacement = "�";
 
   bool operator==(const BytePairEncodingDecodeOptions&) const = default;
 };
@@ -185,7 +184,8 @@ class BytePairEncoding : public TokenizerBase<BytePairEncoding, BytePairEncoding
       std::string_view symbolText,
       bool removeLeadingWordPrefix,
       bool removeTrailingWordSuffix,
-      bool restoreWordDelimiters
+      bool restoreWordDelimiters,
+      std::string_view invalidUtf8Replacement
   ) const;
 
   std::optional<uint32_t> findFallbackTokenId() const;

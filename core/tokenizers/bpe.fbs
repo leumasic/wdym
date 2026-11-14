@@ -2,9 +2,7 @@ include "markup_token.fbs";
 
 namespace wdym.schema;
 
-table ByteFallback {
-  invalid_utf8_replacement: string;
-}
+table ByteFallback {}
 
 union UnknownCharacterFallback {
   ByteFallback,

@@ -88,6 +88,9 @@ target_sources(wdym PUBLIC
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
     core/tokenizers/byte_level_bpe.cppm)
+target_sources(wdym PRIVATE
+  FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
+    core/tokenizer_file.cppm)
 target_compile_features(wdym PUBLIC cxx_std_23)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export

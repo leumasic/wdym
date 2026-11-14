@@ -3,13 +3,13 @@ include "tokenizers/bpe.fbs";
 
 namespace wdym.schema;
 
-union Tokenizer { BytePairEncoding }
+union Encoding { BytePairEncoding }
 
-table File {
+table Tokenizer {
   normalization: Normalization;
-  tokenizer: Tokenizer;
+  encoding: Encoding;
 }
 
-root_type File;
+root_type Tokenizer;
 file_identifier "WDYM";
 /// What a stroke of genius that the library name is 4 characters long

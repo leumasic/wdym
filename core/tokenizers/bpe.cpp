@@ -2,11 +2,14 @@ module;
 
 #include <ankerl/unordered_dense.h>
 
+#include "tokenizer_generated.h"
+
 module wdym;
 
 import std.compat;
 import :containers;
 import :normalization;
+import :tokenizer_file;
 import :utf8;
 
 using wdym::BytePairEncoding;
@@ -70,16 +73,16 @@ struct QueuedPair {
   }
 };
 
-inline uint32_t getLeftSymbolId(uint64_t pairKey) {
+uint32_t getLeftSymbolId(uint64_t pairKey) {
   return static_cast<uint32_t>(pairKey >> 32);
 }
 
-inline uint32_t getRightSymbolId(uint64_t pairKey) {
+uint32_t getRightSymbolId(uint64_t pairKey) {
   // This simply drops the high 32 bits
   return static_cast<uint32_t>(pairKey);
 }
 
-inline uint64_t getPairKey(uint32_t left, uint32_t right) {
+uint64_t getPairKey(uint32_t left, uint32_t right) {
   return (uint64_t{left} << 32) | right;
 }
 
@@ -189,12 +192,14 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
         )
     );
 
-  for (const auto& [name, text] :
-       std::initializer_list<std::pair<std::string_view, std::string_view>>{
-           {"word_delimiter", settings.word_delimiter},
-           {"word_prefix", settings.word_prefix},
-           {"word_suffix", settings.word_suffix},
-       })
+  for (
+      const auto& [name, text] :
+      std::initializer_list<std::pair<std::string_view, std::string_view>>{
+          {"word_delimiter", settings.word_delimiter},
+          {"word_prefix", settings.word_prefix},
+          {"word_suffix", settings.word_suffix},
+      }
+  )
     if (!wdym::isValidUtf8(text))
       throw std::invalid_argument(std::format("{} {:?} is not valid UTF-8", name, text));
 
@@ -208,16 +213,6 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
           std::format("unknown_character_fallback {:?} is not valid UTF-8", *stringFallback)
       );
   }
-
-  if (const auto* byteFallback =
-          std::get_if<wdym::ByteFallback>(&settings.unknown_character_fallback);
-      byteFallback != nullptr && !wdym::isValidUtf8(byteFallback->invalid_utf8_replacement))
-    throw std::invalid_argument(
-        std::format(
-            "unknown_character_fallback's invalid_utf8_replacement {:?} is not valid UTF-8",
-            byteFallback->invalid_utf8_replacement
-        )
-    );
 
   for (const std::string_view markupToken : settings.markup_tokens) {
     if (markupToken.empty())
@@ -853,7 +848,8 @@ std::vector<wdym::TextOrMarkupToken> BytePairEncoding::decode_parts(
         symbolText,
         removeLeadingWordPrefix,
         removeTrailingWordSuffix,
-        options.restore_word_delimiters
+        options.restore_word_delimiters,
+        options.invalid_utf8_replacement
     );
     if (!text.empty())
       parts.emplace_back(std::move(text));
@@ -880,7 +876,8 @@ std::string BytePairEncoding::decodeSymbolText(
     std::string_view symbolText,
     bool removeLeadingWordPrefix,
     bool removeTrailingWordSuffix,
-    bool restoreWordDelimiters
+    bool restoreWordDelimiters,
+    std::string_view invalidUtf8Replacement
 ) const {
   if (removeLeadingWordPrefix && symbolText.starts_with(settings_.word_prefix))
     symbolText.remove_prefix(settings_.word_prefix.size());
@@ -900,11 +897,9 @@ std::string BytePairEncoding::decodeSymbolText(
   else
     text = symbolText;
 
-  if (const auto* byteFallback = std::get_if<ByteFallback>(&settings_.unknown_character_fallback)) {
-    std::string replacedText;
-    if (replaceInvalidUtf8(text, byteFallback->invalid_utf8_replacement, replacedText))
-      text = std::move(replacedText);
-  }
+  std::string replacedText;
+  if (replaceInvalidUtf8(text, invalidUtf8Replacement, replacedText))
+    text = std::move(replacedText);
 
   return text;
 }
@@ -935,8 +930,205 @@ std::optional<uint32_t> BytePairEncoding::findFallbackTokenId() const {
   return std::nullopt;
 }
 
-void BytePairEncoding::save(const std::filesystem::path& path) const {
-  // TODO
+std::vector<std::byte> BytePairEncoding::to_bytes() const {
+  flatbuffers::FlatBufferBuilder builder;
+
+  auto unknownCharacterFallbackType = schema::UnknownCharacterFallback::NONE;
+  flatbuffers::Offset<void> unknownCharacterFallback;
+  if (std::holds_alternative<ByteFallback>(settings_.unknown_character_fallback)) {
+    unknownCharacterFallbackType = schema::UnknownCharacterFallback::ByteFallback;
+    unknownCharacterFallback = schema::CreateByteFallback(builder).Union();
+  } else if (
+      const auto* symbolFallback = std::get_if<std::string>(&settings_.unknown_character_fallback)
+  ) {
+    unknownCharacterFallbackType = schema::UnknownCharacterFallback::SymbolFallback;
+    unknownCharacterFallback = builder.CreateString(*symbolFallback).Union();
+  } else if (
+      const auto* markupFallback = std::get_if<MarkupToken>(&settings_.unknown_character_fallback)
+  ) {
+    unknownCharacterFallbackType = schema::UnknownCharacterFallback::MarkupTokenFallback;
+    unknownCharacterFallback = builder.CreateString(markupFallback->text).Union();
+  }
+
+  const auto settings = schema::CreateBytePairEncodingSettings(
+      builder,
+      builder.CreateString(settings_.word_delimiter),
+      builder.CreateString(settings_.word_prefix),
+      builder.CreateString(settings_.word_suffix),
+      settings_.adjoin_prefix,
+      settings_.adjoin_suffix,
+      unknownCharacterFallbackType,
+      unknownCharacterFallback
+  );
+
+  std::string symbolBytes;
+  std::vector<uint32_t> symbolOffsets = {0};
+  for (const std::string& symbol : symbols_.values()) {
+    symbolBytes.append(symbol);
+    symbolOffsets.push_back(static_cast<uint32_t>(symbolBytes.size()));
+  }
+
+  std::vector<schema::Merge> merges;
+  for (const auto& [pairKey, mergedSymbolId] : pairKeyToMergedSymbolId_)
+    merges.emplace_back(getLeftSymbolId(pairKey), getRightSymbolId(pairKey), mergedSymbolId);
+
+  std::vector<flatbuffers::Offset<schema::MarkupToken>> markupTokens;
+  for (const auto& [markupToken, tokenId] : markupTokenToTokenId_)
+    markupTokens.push_back(
+        schema::CreateMarkupToken(builder, builder.CreateString(markupToken), tokenId)
+    );
+
+  const auto encoding = schema::CreateBytePairEncoding(
+      builder,
+      settings,
+      builder.CreateVector(
+          reinterpret_cast<const uint8_t*>(symbolBytes.data()), symbolBytes.size()
+      ),
+      builder.CreateVector(symbolOffsets),
+      builder.CreateVectorOfStructs(merges),
+      builder.CreateVector(symbolIdToTokenId_),
+      builder.CreateVector(markupTokens)
+  );
+  return finishTokenizerFile(
+      builder, normalizer_, schema::Encoding::BytePairEncoding, encoding.Union()
+  );
+}
+
+BytePairEncoding BytePairEncoding::from_bytes(std::span<const std::byte> bytes) {
+  if (reinterpret_cast<uintptr_t>(bytes.data()) % alignof(std::max_align_t) != 0) {
+    const std::vector<std::byte> alignedBytes(bytes.begin(), bytes.end());
+    return from_bytes(alignedBytes);
+  }
+
+  const schema::Tokenizer& tokenizer = getVerifiedTokenizerFile(bytes);
+  const schema::BytePairEncoding* encoding = tokenizer.encoding_as_BytePairEncoding();
+  if (encoding == nullptr || encoding->settings() == nullptr)
+    throw std::invalid_argument("the tokenizer file doesn't hold a complete BytePairEncoding");
+
+  BytePairEncodingSettings settings;
+  const schema::BytePairEncodingSettings* settingsTable = encoding->settings();
+  settings.word_delimiter = toStringView(settingsTable->word_delimiter());
+  settings.word_prefix = toStringView(settingsTable->word_prefix());
+  settings.word_suffix = toStringView(settingsTable->word_suffix());
+  settings.adjoin_prefix = settingsTable->adjoin_prefix();
+  settings.adjoin_suffix = settingsTable->adjoin_suffix();
+
+  if (settingsTable->unknown_character_fallback_as_ByteFallback() != nullptr)
+    settings.unknown_character_fallback = ByteFallback{};
+  else if (
+      const auto* symbolFallback = settingsTable->unknown_character_fallback_as_SymbolFallback()
+  )
+    settings.unknown_character_fallback = std::string(symbolFallback->string_view());
+  else if (
+      const auto* markupFallback =
+          settingsTable->unknown_character_fallback_as_MarkupTokenFallback()
+  )
+    settings.unknown_character_fallback = MarkupToken{std::string(markupFallback->string_view())};
+  else if (
+      settingsTable->unknown_character_fallback_type() != schema::UnknownCharacterFallback::NONE
+  )
+    throw std::invalid_argument("the tokenizer file has an unreadable unknown_character_fallback");
+
+  Normalizer normalizer = readNormalizer(tokenizer);
+  assertInvalidUtf8IsReplaced(normalizer);
+
+  const std::string_view symbolBytes = toStringView(encoding->symbol_bytes());
+  const std::span<const uint32_t> symbolOffsets = toSpan(encoding->symbol_offsets());
+  if (symbolOffsets.empty() ||
+      symbolOffsets.front() != 0 ||
+      symbolOffsets.back() != symbolBytes.size() ||
+      std::ranges::adjacent_find(symbolOffsets, std::greater_equal<>()) != symbolOffsets.end())
+    throw std::invalid_argument("the tokenizer file has inconsistent symbol offsets");
+
+  StringKeySet symbols;
+  for (size_t symbolId = 0; symbolId + 1 < symbolOffsets.size(); ++symbolId) {
+    const auto symbol = symbolBytes.substr(
+        symbolOffsets[symbolId], symbolOffsets[symbolId + 1] - symbolOffsets[symbolId]
+    );
+    if (!symbols.emplace(symbol).second)
+      throw std::invalid_argument(
+          std::format("the tokenizer file has a duplicate symbol {:?}", symbol)
+      );
+  }
+
+  unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId;
+  if (encoding->merges() != nullptr) {
+    for (const schema::Merge* merge : *encoding->merges()) {
+      const uint32_t leftSymbolId = merge->left_symbol_id();
+      const uint32_t rightSymbolId = merge->right_symbol_id();
+      const uint32_t mergedSymbolId = merge->merged_symbol_id();
+
+      if (leftSymbolId >= symbols.size() ||
+          rightSymbolId >= symbols.size() ||
+          mergedSymbolId >= symbols.size() ||
+          symbols.values()[mergedSymbolId] !=
+              symbols.values()[leftSymbolId] + symbols.values()[rightSymbolId])
+        throw std::invalid_argument("the tokenizer file has an inconsistent merge");
+
+      if (!pairKeyToMergedSymbolId.emplace(getPairKey(leftSymbolId, rightSymbolId), mergedSymbolId)
+               .second)
+        throw std::invalid_argument("the tokenizer file has a duplicate merge");
+    }
+  }
+
+  const std::span<const uint32_t> symbolIdToTokenId = toSpan(encoding->symbol_id_to_token_id());
+  if (symbolIdToTokenId.size() != symbols.size())
+    throw std::invalid_argument("the tokenizer file doesn't have a token ID for every symbol");
+
+  StringKeyMap<uint32_t> markupTokenToTokenId;
+  if (encoding->markup_tokens() != nullptr) {
+    for (const schema::MarkupToken* markupToken : *encoding->markup_tokens()) {
+      const std::string_view text = toStringView(markupToken->text());
+      if (!markupTokenToTokenId.emplace(text, markupToken->token_id()).second)
+        throw std::invalid_argument(
+            std::format("the tokenizer file has a duplicate markup token {:?}", text)
+        );
+
+      settings.markup_tokens.emplace_back(text);
+    }
+  }
+
+  const size_t tokenCount = symbols.size() + markupTokenToTokenId.size();
+  std::vector<bool> areTokenIdsUsed(tokenCount, false);
+  // TODO: refactor to allow token ids outside of [0, token count] range
+  const auto checkIsTokenIdUsed = [&](uint32_t tokenId) {
+    if (tokenId >= tokenCount || areTokenIdsUsed[tokenId])
+      throw std::invalid_argument("the tokenizer file's token IDs aren't dense and unique");
+
+    areTokenIdsUsed[tokenId] = true;
+  };
+
+  for (const uint32_t tokenId : symbolIdToTokenId)
+    checkIsTokenIdUsed(tokenId);
+
+  for (const auto& [_, tokenId] : markupTokenToTokenId)
+    checkIsTokenIdUsed(tokenId);
+
+  settings = getValidatedSettings(std::move(settings));
+
+  if (const auto* symbolFallback = std::get_if<std::string>(&settings.unknown_character_fallback);
+      symbolFallback != nullptr && !symbols.contains(*symbolFallback))
+    throw std::invalid_argument(
+        std::format(
+            "the tokenizer file's symbol fallback {:?} isn't one of its symbols", *symbolFallback
+        )
+    );
+
+  if (std::holds_alternative<ByteFallback>(settings.unknown_character_fallback))
+    for (int byte = 0; byte < 256; ++byte)
+      if (!symbols.contains(std::string(1, static_cast<char>(byte))))
+        throw std::invalid_argument(
+            "the tokenizer file uses byte fallback without all 256 byte symbols"
+        );
+
+  return BytePairEncoding(
+      std::move(normalizer),
+      std::move(settings),
+      std::move(symbols),
+      std::move(pairKeyToMergedSymbolId),
+      std::move(markupTokenToTokenId),
+      std::vector<uint32_t>(symbolIdToTokenId.begin(), symbolIdToTokenId.end())
+  );
 }
 
 std::vector<std::pair<std::string, std::string>> BytePairEncoding::merges() const {
