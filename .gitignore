@@ -222,3 +222,6 @@ __marimo__/
 
 # Personal dev container settings
 .dev/compose.personal.yaml
+# Node-API addon builds
+bindings/typescript/prebuilds/
+bindings/typescript/index.d.ts

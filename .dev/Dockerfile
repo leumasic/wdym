@@ -12,6 +12,8 @@ RUN dnf install -y \
     findutils \
     which \
     python3-devel \
+    nodejs \
+    npm \
     ripgrep \
     fd-find \
     && dnf clean all
