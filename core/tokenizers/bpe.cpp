@@ -9,7 +9,7 @@ module wdym;
 import std.compat;
 import :containers;
 import :normalization;
-import :segmentation;
+import :word_splitting;
 import :tokenizer_file;
 import :utf8;
 
@@ -136,28 +136,6 @@ std::optional<uint32_t> findSymbolId(const StringKeySet& symbols, std::string_vi
   return static_cast<uint32_t>(it - symbols.begin());
 }
 
-constexpr uint32_t NO_MERGE_RANK = std::numeric_limits<uint32_t>::max();
-
-struct PairMerge {
-  uint32_t rank;
-  uint32_t mergedSymbolId;
-};
-
-PairMerge getPairMerge(
-    const unordered_dense::map<uint64_t, uint32_t>& pairKeyToMergedSymbolId,
-    uint32_t leftSymbolId,
-    uint32_t rightSymbolId
-) {
-  const auto it = pairKeyToMergedSymbolId.find(getPairKey(leftSymbolId, rightSymbolId));
-  if (it == pairKeyToMergedSymbolId.end())
-    return {.rank = NO_MERGE_RANK, .mergedSymbolId = 0};
-
-  return {
-      .rank = static_cast<uint32_t>(it - pairKeyToMergedSymbolId.begin()),
-      .mergedSymbolId = it->second,
-  };
-}
-
 wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettings settings) {
   if (const auto* markupFallback =
           std::get_if<wdym::MarkupToken>(&settings.unknownCharacterFallback);
@@ -211,11 +189,11 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
   return settings;
 }
 
-// TODO: maybe rename to MergeReplayEncoder, in contrast to other encoding
-// techniques trained with BPE
-class BytePairEncodingWordEncoder {
+// TODO: add other encoders compatible with BPE (e.g. longest prefix).
+// See  "Greed is All You Need" (Uzan et al.)
+class RankedMergeEncoder {
  public:
-  BytePairEncodingWordEncoder(
+  RankedMergeEncoder(
       const wdym::BytePairEncodingSettings& settings,
       const StringKeySet& symbols,
       const unordered_dense::map<uint64_t, uint32_t>& pairKeyToMergedSymbolId,
@@ -253,15 +231,30 @@ class BytePairEncodingWordEncoder {
 
  private:
   static constexpr uint32_t UNKNOWN_CHARACTER_SYMBOL_ID = std::numeric_limits<uint32_t>::max();
+  static constexpr uint32_t NO_MERGE_RANK = std::numeric_limits<uint32_t>::max();
+
+  struct PairMerge {
+    uint32_t rank;
+    uint32_t mergedSymbolId;
+  };
+
+  PairMerge getPairMerge(uint32_t leftSymbolId, uint32_t rightSymbolId) const {
+    const auto it = pairKeyToMergedSymbolId_.find(getPairKey(leftSymbolId, rightSymbolId));
+    if (it == pairKeyToMergedSymbolId_.end())
+      return {.rank = NO_MERGE_RANK, .mergedSymbolId = 0};
+
+    return {
+        .rank = static_cast<uint32_t>(it - pairKeyToMergedSymbolId_.begin()),
+        .mergedSymbolId = it->second,
+    };
+  }
 
   void mergeSymbolIds() {
     adjacentPairMerges_.clear();
     for (size_t symbolIndex = 0; symbolIndex + 1 < encodedSymbolIds_.size(); ++symbolIndex)
-      adjacentPairMerges_.push_back(getPairMerge(
-          pairKeyToMergedSymbolId_,
-          encodedSymbolIds_[symbolIndex],
-          encodedSymbolIds_[symbolIndex + 1]
-      ));
+      adjacentPairMerges_.push_back(
+          getPairMerge(encodedSymbolIds_[symbolIndex], encodedSymbolIds_[symbolIndex + 1])
+      );
 
     const auto findLowestRankMerge = [this] {
       return std::ranges::min_element(adjacentPairMerges_, {}, &PairMerge::rank);
@@ -276,19 +269,13 @@ class BytePairEncodingWordEncoder {
 
       // previous pair
       if (symbolIndex >= 1)
-        adjacentPairMerges_[symbolIndex - 1] = getPairMerge(
-            pairKeyToMergedSymbolId_,
-            encodedSymbolIds_[symbolIndex - 1],
-            lowestRankMerge->mergedSymbolId
-        );
+        adjacentPairMerges_[symbolIndex - 1] =
+            getPairMerge(encodedSymbolIds_[symbolIndex - 1], lowestRankMerge->mergedSymbolId);
 
       // next pair
       if (symbolIndex + 2 < encodedSymbolIds_.size())
-        adjacentPairMerges_[symbolIndex + 1] = getPairMerge(
-            pairKeyToMergedSymbolId_,
-            lowestRankMerge->mergedSymbolId,
-            encodedSymbolIds_[symbolIndex + 2]
-        );
+        adjacentPairMerges_[symbolIndex + 1] =
+            getPairMerge(lowestRankMerge->mergedSymbolId, encodedSymbolIds_[symbolIndex + 2]);
 
       encodedSymbolIds_[symbolIndex] = lowestRankMerge->mergedSymbolId;
       encodedSymbolIds_.erase(encodedSymbolIds_.begin() + symbolIndex + 1);
@@ -697,7 +684,7 @@ void BytePairEncoding::encodeNormalized(
     std::vector<uint32_t>& tokenIds,
     std::optional<WordCache&> cache
 ) const {
-  BytePairEncodingWordEncoder wordEncoder(
+  RankedMergeEncoder rankedMergeEncoder(
       settings_, symbols_, pairKeyToMergedSymbolId_, symbolIdToTokenId_, findFallbackTokenId()
   );
 
@@ -711,7 +698,7 @@ void BytePairEncoding::encodeNormalized(
     }
 
     if (!cache.has_value()) {
-      wordEncoder.encode(word, tokenIds);
+      rankedMergeEncoder.encode(word, tokenIds);
       return;
     }
 
@@ -722,7 +709,7 @@ void BytePairEncoding::encodeNormalized(
     }
 
     const auto wordFirstTokenIdIndex = tokenIds.size();
-    wordEncoder.encode(word, tokenIds);
+    rankedMergeEncoder.encode(word, tokenIds);
     cache->insert(word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstTokenIdIndex));
   });
 }
@@ -922,7 +909,7 @@ std::vector<std::byte> BytePairEncoding::toBytes() const {
         schema::CreateMarkupToken(builder, builder.CreateString(markupToken), tokenId)
     );
 
-  const auto encoding = schema::CreateBytePairEncoding(
+  const auto model = schema::CreateBytePairEncoding(
       builder,
       settings,
       builder.CreateVector(
@@ -933,9 +920,7 @@ std::vector<std::byte> BytePairEncoding::toBytes() const {
       builder.CreateVector(symbolIdToTokenId_),
       builder.CreateVector(markupTokens)
   );
-  return finishTokenizerFile(
-      builder, normalizer_, schema::Encoding::BytePairEncoding, encoding.Union()
-  );
+  return finishTokenizerFile(builder, normalizer_, schema::Model::BytePairEncoding, model.Union());
 }
 
 BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
@@ -945,12 +930,12 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
   }
 
   const schema::Tokenizer& tokenizer = getVerifiedTokenizerFile(bytes);
-  const schema::BytePairEncoding* encoding = tokenizer.encoding_as_BytePairEncoding();
-  if (encoding == nullptr || encoding->settings() == nullptr)
+  const schema::BytePairEncoding* model = tokenizer.model_as_BytePairEncoding();
+  if (model == nullptr || model->settings() == nullptr)
     throw std::invalid_argument("the tokenizer file doesn't hold a complete BytePairEncoding");
 
   BytePairEncodingSettings settings;
-  const schema::BytePairEncodingSettings* settingsTable = encoding->settings();
+  const schema::BytePairEncodingSettings* settingsTable = model->settings();
   settings.wordDelimiter = toStringView(settingsTable->word_delimiter());
   settings.wordPrefix = toStringView(settingsTable->word_prefix());
   settings.wordSuffix = toStringView(settingsTable->word_suffix());
@@ -976,8 +961,8 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
   Normalizer normalizer = readNormalizer(tokenizer);
   assertInvalidUtf8IsReplaced(normalizer);
 
-  const std::string_view symbolBytes = toStringView(encoding->symbol_bytes());
-  const std::span<const uint32_t> symbolOffsets = toSpan(encoding->symbol_offsets());
+  const std::string_view symbolBytes = toStringView(model->symbol_bytes());
+  const std::span<const uint32_t> symbolOffsets = toSpan(model->symbol_offsets());
   if (symbolOffsets.empty() ||
       symbolOffsets.front() != 0 ||
       symbolOffsets.back() != symbolBytes.size() ||
@@ -996,8 +981,8 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
   }
 
   unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId;
-  if (encoding->merges() != nullptr) {
-    for (const schema::Merge* merge : *encoding->merges()) {
+  if (model->merges() != nullptr) {
+    for (const schema::Merge* merge : *model->merges()) {
       const uint32_t leftSymbolId = merge->left_symbol_id();
       const uint32_t rightSymbolId = merge->right_symbol_id();
       const uint32_t mergedSymbolId = merge->merged_symbol_id();
@@ -1015,13 +1000,13 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
     }
   }
 
-  const std::span<const uint32_t> symbolIdToTokenId = toSpan(encoding->symbol_id_to_token_id());
+  const std::span<const uint32_t> symbolIdToTokenId = toSpan(model->symbol_id_to_token_id());
   if (symbolIdToTokenId.size() != symbols.size())
     throw std::invalid_argument("the tokenizer file doesn't have a token ID for every symbol");
 
   StringKeyMap<uint32_t> markupTokenToTokenId;
-  if (encoding->markup_tokens() != nullptr) {
-    for (const schema::MarkupToken* markupToken : *encoding->markup_tokens()) {
+  if (model->markup_tokens() != nullptr) {
+    for (const schema::MarkupToken* markupToken : *model->markup_tokens()) {
       const std::string_view text = toStringView(markupToken->text());
       if (!markupTokenToTokenId.emplace(text, markupToken->token_id()).second)
         throw std::invalid_argument(

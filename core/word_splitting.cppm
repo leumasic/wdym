@@ -1,4 +1,4 @@
-module wdym:segmentation;
+module wdym:word_splitting;
 
 import std;
 

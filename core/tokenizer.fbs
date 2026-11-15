@@ -3,11 +3,11 @@ include "tokenizers/bpe.fbs";
 
 namespace wdym.schema;
 
-union Encoding { BytePairEncoding }
+union Model { BytePairEncoding }
 
 table Tokenizer {
-  normalization: Normalization;
-  encoding: Encoding;
+  normalizer: Normalizer;
+  model: Model;
 }
 
 root_type Tokenizer;

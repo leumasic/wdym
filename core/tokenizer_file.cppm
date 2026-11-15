@@ -31,8 +31,8 @@ std::span<const uint32_t> toSpan(const flatbuffers::Vector<uint32_t>* values) {
 std::vector<std::byte> finishTokenizerFile(
     flatbuffers::FlatBufferBuilder& builder,
     const Normalizer& normalizer,
-    schema::Encoding encodingType,
-    flatbuffers::Offset<void> encoding
+    schema::Model modelType,
+    flatbuffers::Offset<void> model
 ) {
   std::vector<flatbuffers::Offset<schema::NormalizationStep>> normalizationSteps;
   for (const CompiledNormalizationStep& step : normalizer.steps)
@@ -50,11 +50,11 @@ std::vector<std::byte> finishTokenizerFile(
   if (const auto* replacement = std::get_if<std::string>(&normalizer.invalidUtf8Fallback))
     invalidUtf8Replacement = builder.CreateString(*replacement);
 
-  const auto normalization = schema::CreateNormalization(
+  const auto normalizerTable = schema::CreateNormalizer(
       builder, invalidUtf8Replacement, builder.CreateVector(normalizationSteps)
   );
   schema::FinishTokenizerBuffer(
-      builder, schema::CreateTokenizer(builder, normalization, encodingType, encoding)
+      builder, schema::CreateTokenizer(builder, normalizerTable, modelType, model)
   );
 
   const auto* buffer = reinterpret_cast<const std::byte*>(builder.GetBufferPointer());
@@ -78,12 +78,12 @@ Normalizer readNormalizer(const schema::Tokenizer& tokenizer) {
   std::vector<CompiledNormalizationStep> normalizationSteps;
   InvalidUtf8Fallback invalidUtf8Fallback = KeepInvalidUtf8{};
 
-  if (const schema::Normalization* normalizationTable = tokenizer.normalization()) {
-    if (const flatbuffers::String* replacement = normalizationTable->invalid_utf8_replacement())
+  if (const schema::Normalizer* normalizerTable = tokenizer.normalizer()) {
+    if (const flatbuffers::String* replacement = normalizerTable->invalid_utf8_replacement())
       invalidUtf8Fallback = std::string(replacement->string_view());
 
-    if (normalizationTable->steps() != nullptr)
-      for (const schema::NormalizationStep* step : *normalizationTable->steps())
+    if (normalizerTable->steps() != nullptr)
+      for (const schema::NormalizationStep* step : *normalizerTable->steps())
         normalizationSteps.push_back({
             .name = std::string(toStringView(step->name())),
             .trieUnits = std::ranges::to<std::vector>(toSpan(step->trie_units())),

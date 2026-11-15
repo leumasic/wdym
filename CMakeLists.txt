@@ -85,7 +85,7 @@ target_sources(wdym PUBLIC
     core/utils/utf8.cppm
     core/markup_token.cppm
     core/normalization.cppm
-    core/segmentation.cppm
+    core/word_splitting.cppm
     core/tokenizer.cppm
     core/tokenizers/bpe.cppm
     core/tokenizers/byte_level_bpe.cppm)
