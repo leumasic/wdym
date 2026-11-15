@@ -32,9 +32,9 @@ wheel.py-api = "cp312"
 wheel.packages = ["bindings/python/wdym"]
 # TODO: update min version to stable 4.5.0 version once it lands. We want it for import std; support
 # https://cmake.org/cmake/help/latest/release/4.5.html#languages
-cmake.version = ">=4.5.0rc2"
+cmake.version = ">=4.5.0"
 ninja.version = ">=1.11"
-sdist.exclude = [".dev/", ".github/", ".clang-format", ".clang-tidy", "tests/"]
+sdist.exclude = [".dev/", ".github/", ".clang-format", ".clang-tidy", ".clangd", ".gitignore", ".python-version", "CMakePresets.json", "docs/", "tests/", "uv.lock"]
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
@@ -46,8 +46,11 @@ regex = 'project\(wdym\s+VERSION\s+(?P<value>[0-9.]+)'
 skip = ["cp3??t-*", "*-musllinux_*"]
 manylinux-x86_64-image = "manylinux_2_34"
 manylinux-aarch64-image = "manylinux_2_34"
-test-command = "python -c \"import wdym; wdym.ByteLevelBPETokenizer.train(sentence_iterator=['hello world'])\""
+test-command = "python -c \"import wdym; tokenizer = wdym.BytePairEncoding.train(sentence_iterator=['hello world'], max_vocabulary_size=300); assert tokenizer.decode(tokenizer.encode('hello world')) == 'hello world'\""
 
 [tool.cibuildwheel.linux]
-before-all = "dnf install -y gcc-toolset-15-gcc-c++"
-environment = { CC = "/opt/rh/gcc-toolset-15/root/usr/bin/gcc", CXX = "/opt/rh/gcc-toolset-15/root/usr/bin/g++" }
+before-all = [
+    "curl -Ls https://micro.mamba.pm/api/micromamba/linux-$(uname -m | sed s/x86_64/64/)/2.10.0 | tar -xj -C /usr/local bin/micromamba",
+    "micromamba create -y -p /opt/gcc-16 -c conda-forge gxx=16.2",
+]
+environment = { CC = "/opt/gcc-16/bin/gcc", CXX = "/opt/gcc-16/bin/g++", LDFLAGS = "-static-libstdc++ -static-libgcc" }
