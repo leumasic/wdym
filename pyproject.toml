@@ -19,7 +19,7 @@ dev = [
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "CMakeLists.txt" },
-    { file = "core/**/*" },
+    { file = "src/**/*" },
     { file = "bindings/**/*" },
 ]
 

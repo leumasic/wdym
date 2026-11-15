@@ -48,10 +48,10 @@ FetchContent_Declare(flatbuffers
 FetchContent_MakeAvailable(flatbuffers)
 
 set(WDYM_SCHEMAS
-  ${PROJECT_SOURCE_DIR}/core/normalization.fbs
-  ${PROJECT_SOURCE_DIR}/core/markup_token.fbs
-  ${PROJECT_SOURCE_DIR}/core/tokenizers/bpe.fbs
-  ${PROJECT_SOURCE_DIR}/core/tokenizer.fbs)
+  ${PROJECT_SOURCE_DIR}/src/normalization.fbs
+  ${PROJECT_SOURCE_DIR}/src/markup_token.fbs
+  ${PROJECT_SOURCE_DIR}/src/tokenizers/bpe.fbs
+  ${PROJECT_SOURCE_DIR}/src/tokenizer.fbs)
 set(WDYM_GENERATED_DIR ${PROJECT_BINARY_DIR}/generated)
 set(WDYM_GENERATED_HEADERS
   ${WDYM_GENERATED_DIR}/normalization_generated.h
@@ -62,7 +62,7 @@ set(WDYM_GENERATED_HEADERS
 add_custom_command(
   OUTPUT ${WDYM_GENERATED_HEADERS}
   COMMAND flatc --cpp --scoped-enums
-    -I ${PROJECT_SOURCE_DIR}/core
+    -I ${PROJECT_SOURCE_DIR}/src
     -o ${WDYM_GENERATED_DIR}
     ${WDYM_SCHEMAS}
   DEPENDS flatc ${WDYM_SCHEMAS}
@@ -70,28 +70,28 @@ add_custom_command(
 )
 
 add_library(wdym STATIC
-  core/normalization.cpp
-  core/tokenizers/byte_level_bpe.cpp
-  core/tokenizers/bpe.cpp
+  src/normalization.cpp
+  src/tokenizers/byte_level_bpe.cpp
+  src/tokenizers/bpe.cpp
   ${WDYM_GENERATED_HEADERS}
 )
 add_library(wdym::wdym ALIAS wdym)
 
 target_sources(wdym PUBLIC
-  FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
-    core/wdym.cppm
-    core/utils/containers.cppm
-    core/utils/double_array_trie.cppm
-    core/utils/utf8.cppm
-    core/markup_token.cppm
-    core/normalization.cppm
-    core/word_splitting.cppm
-    core/tokenizer.cppm
-    core/tokenizers/bpe.cppm
-    core/tokenizers/byte_level_bpe.cppm)
+  FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/src FILES
+    src/wdym.cppm
+    src/utils/containers.cppm
+    src/utils/double_array_trie.cppm
+    src/utils/utf8.cppm
+    src/markup_token.cppm
+    src/normalization.cppm
+    src/word_splitting.cppm
+    src/tokenizer.cppm
+    src/tokenizers/bpe.cppm
+    src/tokenizers/byte_level_bpe.cppm)
 target_sources(wdym PRIVATE
-  FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/core FILES
-    core/tokenizer_file.cppm)
+  FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/src FILES
+    src/tokenizer_file.cppm)
 target_compile_features(wdym PUBLIC cxx_std_26)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
