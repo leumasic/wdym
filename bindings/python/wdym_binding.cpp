@@ -71,14 +71,19 @@ auto makeArgument(const char* name) {
     return argument;
 }
 
+template <typename T>
+auto makeArgument(const char* name, const T& defaultValue) {
+  return makeArgument<^^T>(name) = defaultValue;
+}
+
 template <std::meta::info Field, typename T>
 auto makeFieldArgument(const T& defaults) {
-  const auto argument = makeArgument<std::meta::type_of(Field)>(getPythonFieldName(Field));
+  constexpr auto PYTHON_FIELD_NAME = getPythonFieldName(Field);
 
   if constexpr (std::meta::has_default_member_initializer(Field))
-    return argument = defaults.[:Field:];
+    return makeArgument(PYTHON_FIELD_NAME, defaults.[:Field:]);
   else
-    return argument;
+    return makeArgument<std::meta::type_of(Field)>(PYTHON_FIELD_NAME);
 }
 
 template <typename T>
@@ -118,20 +123,28 @@ class GilSafeObject {
 
 wdym::TextStream streamPythonTexts(nb::handle iterator) {
   GilSafeObject current;
+
   while (true) {
     std::string_view text;
+
     {
       nb::gil_scoped_acquire acquire;
       current.object = nb::steal(PyIter_Next(iterator.ptr()));
+
       if (!current.object.is_valid()) {
         if (PyErr_Occurred())
           throw nb::python_error();
+
         co_return;
       }
+
+      // TODO: parametrize hardcoded "sentence_iterator"
       if (!nb::isinstance<nb::str>(current.object))
         throw nb::type_error("sentence_iterator must yield str");
+
       text = nb::cast<std::string_view>(current.object);
     }
+
     co_yield text;
   }
 }
@@ -143,8 +156,8 @@ void bindTrain(nb::class_<T>& cls) {
   static constexpr auto TRAIN_OPTION_FIELDS = getFields(^^TrainOptions);
   const TrainOptions defaultTrainOptions{};
 
-  const auto settingsArgument = makeArgument<^^Settings>("settings") = Settings{};
-  const auto normalizationArgument = nb::arg("normalization") = wdym::NormalizationSettings{};
+  const auto settingsArgument = makeArgument("settings", Settings{});
+  const auto normalizationArgument = makeArgument("normalization", wdym::NormalizationSettings{});
 
   [&]<std::size_t... FieldIndices>(std::index_sequence<FieldIndices...>) {
     cls.def_static(
@@ -246,7 +259,7 @@ void bindTokenizer(nb::module_& m) {
             return tokenizer.decode(tokenIds, options);
           },
           "token_ids"_a,
-          makeArgument<^^DecodeOptions>("options") = DecodeOptions{}
+          makeArgument("options", DecodeOptions{})
       )
       .def(
           "token_to_id",
