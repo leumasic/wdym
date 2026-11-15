@@ -4,9 +4,14 @@
     {
       "name": "dev",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "python",
+      "inherits": "dev",
       "cacheVariables": {
-        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python"
+        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
+        "WDYM_BUILD_PYTHON": "ON"
       }
     }
   ],

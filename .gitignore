@@ -219,3 +219,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+
+# Personal dev container settings
+.dev/compose.personal.yaml

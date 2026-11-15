@@ -14,7 +14,7 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
+option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" OFF)
 option(WDYM_BUILD_TESTS "Build the test suite" ${PROJECT_IS_TOP_LEVEL})
 
 include(FetchContent)
@@ -126,6 +126,13 @@ endif()
 if (NOT SKBUILD)
   include(GNUInstallDirs)
   include(CMakePackageConfigHelpers)
+
+  install(FILES
+    ${unordered_dense_SOURCE_DIR}/include/ankerl/unordered_dense.h
+    ${unordered_dense_SOURCE_DIR}/include/ankerl/stl.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/wdym/third_party/ankerl)
+  target_include_directories(wdym SYSTEM PUBLIC
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/wdym/third_party>)
 
   install(TARGETS wdym EXPORT wdymTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

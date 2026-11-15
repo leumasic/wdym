@@ -1,27 +1,111 @@
 # What Do You Mean (wdym)
 
-wdym is a C++ library for extracting meaning from text corpora, with bindings for several languages.
+wdym is a C++ tokenizer library with bindings for several languages.
 
 > ⚠️ The library is in early stages of development and likely to have breaking API changes.
 
-## Installation
+## Features
 
-## Usage
+- ⚡ Fast training and encoding
+- 🧩 Custom text normalization driven by replacement rules, along with built-in presets
+- 🛡️ Markup tokens kept separate from text, so user input can't inject them
+- 🔌 Bindings for Python and Node.js
 
-We expose bindings for certain languages as documented in the table below.
-
-| Language | Package | Install |
-|---|---|---|
-| Python | [`wdym`](https://pypi.org/project/wdym/) on PyPI | `pip install wdym` |
-| Node.js | not published yet | |
+## Getting started
 
 ### Python
 
-TBD
+Install [`wdym`](https://pypi.org/project/wdym/) from PyPI:
+
+```sh
+pip install wdym
+```
+
+```python
+from wdym import BytePairEncoding
+
+tokenizer = BytePairEncoding.train(
+    sentence_iterator=["hello world", "the quick brown fox"],
+    max_vocabulary_size=300,
+)
+
+# Alternatively, train the tokenizer from a list of files
+tokenizer_trained_from_files = BytePairEncoding.train(
+    input=["first.txt", "second.txt"],
+    max_vocabulary_size=300,
+)
+
+token_ids = tokenizer.encode("hello world")
+print(token_ids, tokenizer.decode(token_ids))
+
+tokenizer.save("tokenizer.wdym")
+loaded = BytePairEncoding.load("tokenizer.wdym")
+```
 
 ### Node.js
 
+Not published yet.
+
+### C++
+
+> [!NOTE]
+> **Requirement**: C++26 (GCC 16 or newer) and CMake 4.5 or newer.
+
+Add wdym to your CMake project:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(wdym
+  GIT_REPOSITORY https://github.com/leumasic/wdym.git
+  GIT_TAG        master
+)
+FetchContent_MakeAvailable(wdym)
+
+target_link_libraries(your_target PRIVATE wdym::wdym) # replace your_target
+```
+
+```cpp
+import std;
+import wdym;
+
+using wdym::BytePairEncoding;
+
+int main() {
+  const std::vector<std::string> texts = {"hello world", "the quick brown fox"};
+  const auto tokenizer = BytePairEncoding::train(texts, {.maxVocabularySize = 300});
+
+  // Alternatively, train the tokenizer from a list of files
+  const auto tokenizerTrainedFromFiles =
+      BytePairEncoding::trainFromFiles({"first.txt", "second.txt"}, {.maxVocabularySize = 300});
+
+  const std::vector<std::uint32_t> tokenIds = tokenizer.encode("hello world");
+  std::println("{} {}", tokenIds, tokenizer.decode(tokenIds));
+
+  tokenizer.save("tokenizer.wdym");
+  const auto loaded = BytePairEncoding::load("tokenizer.wdym");
+}
+```
+
+## Documentation
+
 TBD
+
+## Benchmarks
+
+TBD
+
+## Building from source
+
+> [!NOTE]
+> GCC >= 16 and CMake >= 4.5 and Ninja.
+
+Configure, build and test the library with the `dev` preset:
+
+```sh
+cmake --workflow --preset dev
+```
+
+For a ready-made environment, the `.dev` folder has a container image with these tools installed, along with a compose file.
 
 ## Roadmap
 
@@ -49,3 +133,7 @@ The following is a non-comprehensive list of additions I'd like to work on.
 - [ ] Python: pickling, encoding and decoding of text and markup token parts, word cache, and NumPy arrays
 - [ ] Bindings for JavaScript runtimes (e.g. Node.js, Bun, etc)
 - [ ] C API
+
+## License
+
+wdym is released under the [MIT License](LICENSE).

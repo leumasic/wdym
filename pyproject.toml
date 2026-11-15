@@ -36,6 +36,9 @@ cmake.version = ">=4.5.0"
 ninja.version = ">=1.11"
 sdist.exclude = [".dev/", ".github/", ".clang-format", ".clang-tidy", ".clangd", ".gitignore", ".python-version", "CMakePresets.json", "docs/", "tests/", "uv.lock"]
 
+[tool.scikit-build.cmake.define]
+WDYM_BUILD_PYTHON = "ON"
+
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
 input = "CMakeLists.txt"
