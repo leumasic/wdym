@@ -9,14 +9,11 @@
 
 import std;
 import wdym;
+import binding_reflection;
 
 namespace nb = nanobind;
 using namespace nb::literals;
 namespace fs = std::filesystem;
-
-consteval const char* getIdentifier(std::meta::info entity) {
-  return std::define_static_string(std::meta::identifier_of(entity));
-}
 
 // The lengths we go to to make our python friends happy...
 consteval std::string toSnakeCase(std::string_view name) {
@@ -43,18 +40,12 @@ consteval bool canRepresentNone(std::meta::info type) {
   if (type == ^^std::monostate)
     return true;
 
-  if (!std::meta::has_template_arguments(type) || std::meta::template_of(type) != ^^std::variant)
+  if (!isTemplateSpecializationOf(type, ^^std::variant))
     return false;
 
   return std::ranges::contains(
       std::meta::template_arguments_of(type) | std::views::transform(std::meta::dealias),
       ^^std::monostate
-  );
-}
-
-consteval auto getFields(std::meta::info type) {
-  return std::define_static_array(
-      std::meta::nonstatic_data_members_of(type, std::meta::access_context::unprivileged())
   );
 }
 
