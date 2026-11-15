@@ -112,7 +112,7 @@ if (WDYM_BUILD_PYTHON)
     OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
   find_package(nanobind CONFIG REQUIRED)
 
-  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/wdym_binding.cpp)
+  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/python/wdym_binding.cpp)
   target_link_libraries(wdym_ext PRIVATE wdym::wdym)
   target_compile_options(wdym_ext PRIVATE -freflection)
   install(TARGETS wdym_ext LIBRARY DESTINATION wdym)

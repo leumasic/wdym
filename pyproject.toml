@@ -29,6 +29,7 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 wheel.py-api = "cp312"
+wheel.packages = ["bindings/python/wdym"]
 # TODO: update min version to stable 4.5.0 version once it lands. We want it for import std; support
 # https://cmake.org/cmake/help/latest/release/4.5.html#languages
 cmake.version = ">=4.5.0rc2"
