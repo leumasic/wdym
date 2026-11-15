@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/operators.h>
 #include <nanobind/stl/filesystem.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/string_view.h>
 #include <nanobind/stl/variant.h>
@@ -13,18 +14,96 @@ namespace nb = nanobind;
 using namespace nb::literals;
 namespace fs = std::filesystem;
 
-using wdym::ByteLevelBPETokenizer;
-using wdym::ByteLevelBPETrainOptions;
+consteval const char* getIdentifier(std::meta::info entity) {
+  return std::define_static_string(std::meta::identifier_of(entity));
+}
 
-template <typename Options, typename Value>
-struct TrainOption {
-  const char* name;
-  Value Options::* field;
-};
+// The lengths we go to to make our python friends happy...
+consteval std::string toSnakeCase(std::string_view name) {
+  std::string snakeCaseName;
 
-template <typename Options, typename Value>
-TrainOption<Options, Value> option(const char* name, Value Options::* field) {
-  return {name, field};
+  for (const char character : name) {
+    if (character >= 'A' && character <= 'Z') {
+      snakeCaseName.push_back('_');
+      snakeCaseName.push_back(static_cast<char>(character - 'A' + 'a'));
+    } else {
+      snakeCaseName.push_back(character);
+    }
+  }
+
+  return snakeCaseName;
+}
+
+consteval const char* getPythonFieldName(std::meta::info field) {
+  return std::define_static_string(toSnakeCase(std::meta::identifier_of(field)));
+}
+
+consteval bool canRepresentNone(std::meta::info type) {
+  type = std::meta::dealias(type);
+  if (type == ^^std::monostate)
+    return true;
+
+  if (!std::meta::has_template_arguments(type) || std::meta::template_of(type) != ^^std::variant)
+    return false;
+
+  return std::ranges::contains(
+      std::meta::template_arguments_of(type) | std::views::transform(std::meta::dealias),
+      ^^std::monostate
+  );
+}
+
+consteval auto getFields(std::meta::info type) {
+  return std::define_static_array(
+      std::meta::nonstatic_data_members_of(type, std::meta::access_context::unprivileged())
+  );
+}
+
+template <typename T, std::size_t FieldIndex>
+using FieldType = [:std::meta::type_of(getFields(^^T)[FieldIndex]):];
+
+template <std::meta::info Type>
+auto makeArgument(const char* name) {
+  const nb::arg argument(name);
+
+  if constexpr (canRepresentNone(Type))
+    return argument.none();
+  else
+    return argument;
+}
+
+template <std::meta::info Field, typename T>
+auto makeFieldArgument(const T& defaults) {
+  const auto argument = makeArgument<std::meta::type_of(Field)>(getPythonFieldName(Field));
+
+  if constexpr (std::meta::has_default_member_initializer(Field))
+    return argument = defaults.[:Field:];
+  else
+    return argument;
+}
+
+template <typename T>
+void bindStruct(nb::module_& m) {
+  static constexpr auto FIELDS = getFields(^^T);
+  const T defaults{};
+
+  nb::class_<T> cls(m, getIdentifier(^^T));
+  if constexpr (FIELDS.empty())
+    cls.def(nb::init<>());
+  else
+    [&]<std::size_t... FieldIndices>(std::index_sequence<FieldIndices...>) {
+      cls.def(
+          nb::init<FieldType<T, FieldIndices>...>(),
+          nb::kw_only(),
+          makeFieldArgument<FIELDS[FieldIndices]>(defaults)...
+      );
+    }(std::make_index_sequence<FIELDS.size()>());
+
+  template for (constexpr auto field : FIELDS) {
+    const auto setterArgument = makeArgument<std::meta::type_of(field)>("value");
+    cls.def_rw(getPythonFieldName(field), &[:field:], nb::for_setter(setterArgument));
+  }
+
+  cls.def(nb::self == nb::self);
 }
 
 class GilSafeObject {
@@ -57,101 +136,137 @@ wdym::TextStream streamPythonTexts(nb::handle iterator) {
   }
 }
 
-template <wdym::Tokenizer T, typename... Values>
-void bind_train(nb::class_<T>& cls, TrainOption<typename T::TrainOptions, Values>... options) {
-  using Options = T::TrainOptions;
-  const Options defaults{};
+template <wdym::Tokenizer T>
+void bindTrain(nb::class_<T>& cls) {
+  using TrainOptions = T::TrainOptions;
+  using Settings = T::Settings;
+  static constexpr auto TRAIN_OPTION_FIELDS = getFields(^^TrainOptions);
+  const TrainOptions defaultTrainOptions{};
 
-  const auto make_options = [options...](const Values&... values) {
-    Options result{};
-    ((result.*(options.field) = values), ...);
-    return result;
-  };
+  const auto settingsArgument = makeArgument<^^Settings>("settings") = Settings{};
+  const auto normalizationArgument = nb::arg("normalization") = wdym::NormalizationSettings{};
 
-  cls.def_static(
-         "train",
-         [make_options](const fs::path& input, Values... values) {
-           const Options trainOptions = make_options(values...);
-           nb::gil_scoped_release release;
-           return T::train_from_files(input, trainOptions);
-         },
-         nb::kw_only(),
-         "input"_a,
-         (nb::arg(options.name) = defaults.*(options.field))...
-  )
+  [&]<std::size_t... FieldIndices>(std::index_sequence<FieldIndices...>) {
+    cls.def_static(
+           "train",
+           [](const fs::path& input,
+              FieldType<TrainOptions, FieldIndices>... trainOptionValues,
+              Settings settings,
+              wdym::NormalizationSettings normalization) {
+             const TrainOptions trainOptions{trainOptionValues...};
+
+             nb::gil_scoped_release release;
+
+             return T::trainFromFiles(input, trainOptions, settings, normalization);
+           },
+           nb::kw_only(),
+           "input"_a,
+           makeFieldArgument<TRAIN_OPTION_FIELDS[FieldIndices]>(defaultTrainOptions)...,
+           settingsArgument,
+           normalizationArgument
+    )
+        .def_static(
+            "train",
+            [](const std::vector<fs::path>& input,
+               FieldType<TrainOptions, FieldIndices>... trainOptionValues,
+               Settings settings,
+               wdym::NormalizationSettings normalization) {
+              const TrainOptions trainOptions{trainOptionValues...};
+
+              nb::gil_scoped_release release;
+
+              return T::trainFromFiles(input, trainOptions, settings, normalization);
+            },
+            nb::kw_only(),
+            "input"_a,
+            makeFieldArgument<TRAIN_OPTION_FIELDS[FieldIndices]>(defaultTrainOptions)...,
+            settingsArgument,
+            normalizationArgument
+        )
+        .def_static(
+            "train",
+            [](nb::typed<nb::iterable, nb::str> sentenceIterator,
+               FieldType<TrainOptions, FieldIndices>... trainOptionValues,
+               Settings settings,
+               wdym::NormalizationSettings normalization) {
+              const TrainOptions trainOptions{trainOptionValues...};
+              const nb::object iterator = nb::iter(sentenceIterator);
+
+              nb::gil_scoped_release release;
+
+              return T::train(streamPythonTexts(iterator), trainOptions, settings, normalization);
+            },
+            nb::kw_only(),
+            "sentence_iterator"_a,
+            makeFieldArgument<TRAIN_OPTION_FIELDS[FieldIndices]>(defaultTrainOptions)...,
+            settingsArgument,
+            normalizationArgument
+        );
+  }(std::make_index_sequence<TRAIN_OPTION_FIELDS.size()>());
+}
+
+template <wdym::Tokenizer T>
+void bindTokenizer(nb::module_& m) {
+  using DecodeOptions = T::DecodeOptions;
+
+  nb::class_<T> cls(m, getIdentifier(^^T));
+  bindTrain(cls);
+
+  cls.def_static("load", &T::load, "path"_a)
+      .def("save", &T::save, "path"_a)
       .def_static(
-          "train",
-          [make_options](const std::vector<fs::path>& input, Values... values) {
-            const Options trainOptions = make_options(values...);
-            nb::gil_scoped_release release;
-            return T::train_from_files(input, trainOptions);
+          "from_bytes",
+          [](const nb::bytes& data) {
+            return T::fromBytes(std::span(static_cast<const std::byte*>(data.data()), data.size()));
           },
-          nb::kw_only(),
-          "input"_a,
-          (nb::arg(options.name) = defaults.*(options.field))...
+          "data"_a
       )
-      .def_static(
-          "train",
-          [make_options](nb::typed<nb::iterable, nb::str> sentence_iterator, Values... values) {
-            const Options trainOptions = make_options(values...);
-            const nb::object iterator = nb::iter(sentence_iterator);
+      .def(
+          "to_bytes",
+          [](const T& tokenizer) {
+            const std::vector<std::byte> bytes = tokenizer.toBytes();
+            return nb::bytes(bytes.data(), bytes.size());
+          }
+      )
+      .def("normalize", &T::normalize, "text"_a)
+      .def(
+          "encode",
+          [](const T& tokenizer, std::string_view text) {
             nb::gil_scoped_release release;
-            return T::train(streamPythonTexts(iterator), trainOptions);
+            return tokenizer.encode(text);
           },
-          nb::kw_only(),
-          "sentence_iterator"_a,
-          (nb::arg(options.name) = defaults.*(options.field))...
+          "text"_a
+      )
+      .def(
+          "decode",
+          [](const T& tokenizer,
+             const std::vector<std::uint32_t>& tokenIds,
+             DecodeOptions options) {
+            nb::gil_scoped_release release;
+            return tokenizer.decode(tokenIds, options);
+          },
+          "token_ids"_a,
+          makeArgument<^^DecodeOptions>("options") = DecodeOptions{}
+      )
+      .def(
+          "token_to_id",
+          [](const T& tokenizer, std::string_view token) { return tokenizer.tokenToId(token); },
+          "token"_a
+      )
+      .def(
+          "token_to_id",
+          [](const T& tokenizer, const nb::bytes& token) {
+            return tokenizer.tokenToId(std::string_view(token.c_str(), token.size()));
+          },
+          "token"_a
+      )
+      .def(
+          "markup_token_to_id",
+          [](const T& tokenizer, std::string_view token) {
+            return tokenizer.markupTokenToId(token);
+          },
+          "token"_a
       );
-}
-
-template <wdym::Tokenizer T, typename... Values>
-void bind_tokenizer(nb::module_& m, TrainOption<typename T::TrainOptions, Values>... options) {
-  static_assert(
-      !wdym::tokenizer_name<T>.empty(), "specialize wdym::tokenizer_name for this tokenizer"
-  );
-  nb::class_<T> cls(m, wdym::tokenizer_name<T>.data());
-  cls.def_static("load", &T::load, "path"_a).def("save", &T::save, "path"_a);
-  bind_train(cls, options...);
-}
-
-void bind_normalizer(nb::module_& m) {
-  const wdym::ReplacementRule defaultReplacementRule;
-  nb::class_<wdym::ReplacementRule>(m, "ReplacementRule")
-      .def(
-          nb::init<std::string, std::string>(),
-          "input"_a = defaultReplacementRule.input,
-          "output"_a = defaultReplacementRule.output
-      )
-      .def_rw("input", &wdym::ReplacementRule::input)
-      .def_rw("output", &wdym::ReplacementRule::output)
-      .def(nb::self == nb::self);
-
-  const wdym::NormalizationStep defaultNormalizationStep;
-  nb::class_<wdym::NormalizationStep>(m, "NormalizationStep")
-      .def(
-          nb::init<std::string, std::vector<wdym::ReplacementRule>>(),
-          "name"_a = defaultNormalizationStep.name,
-          "rules"_a = defaultNormalizationStep.rules
-      )
-      .def_rw("name", &wdym::NormalizationStep::name)
-      .def_rw("rules", &wdym::NormalizationStep::rules)
-      .def(nb::self == nb::self);
-
-  nb::class_<wdym::KeepInvalidUtf8>(m, "KeepInvalidUtf8")
-      .def(nb::init<>())
-      .def(nb::self == nb::self);
-
-  const wdym::NormalizationSettings defaultNormalizationSettings;
-  nb::class_<wdym::NormalizationSettings>(m, "NormalizationSettings")
-      .def(
-          nb::init<wdym::InvalidUtf8Fallback, std::vector<wdym::NormalizationStep>>(),
-          nb::kw_only(),
-          "invalid_utf8_fallback"_a = defaultNormalizationSettings.invalid_utf8_fallback,
-          "steps"_a = defaultNormalizationSettings.steps
-      )
-      .def_rw("invalid_utf8_fallback", &wdym::NormalizationSettings::invalid_utf8_fallback)
-      .def_rw("steps", &wdym::NormalizationSettings::steps)
-      .def(nb::self == nb::self);
 }
 
 NB_MODULE(wdym_ext, m) {
@@ -167,9 +282,14 @@ NB_MODULE(wdym_ext, m) {
     }
   });
 
-  bind_normalizer(m);
+  bindStruct<wdym::ReplacementRule>(m);
+  bindStruct<wdym::NormalizationStep>(m);
+  bindStruct<wdym::KeepInvalidUtf8>(m);
+  bindStruct<wdym::NormalizationSettings>(m);
+  bindStruct<wdym::MarkupToken>(m);
+  bindStruct<wdym::ByteFallback>(m);
+  bindStruct<wdym::BytePairEncodingSettings>(m);
+  bindStruct<wdym::BytePairEncodingDecodeOptions>(m);
 
-  bind_tokenizer<ByteLevelBPETokenizer>(
-      m, option("max_vocabulary_size", &ByteLevelBPETrainOptions::max_vocabulary_size)
-  );
+  bindTokenizer<wdym::BytePairEncoding>(m);
 }
