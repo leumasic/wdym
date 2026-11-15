@@ -189,8 +189,6 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
   return settings;
 }
 
-// TODO: add other encoders compatible with BPE (e.g. longest prefix).
-// See  "Greed is All You Need" (Uzan et al.)
 class RankedMergeEncoder {
  public:
   RankedMergeEncoder(
