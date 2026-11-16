@@ -1,6 +1,6 @@
-# wdym for Python
+# What Do You Mean (wdym)
 
-[wdym](https://github.com/leumasic/wdym) is a library of fast subword tokenizers for language models.
+wdym is a library of fast subword tokenizers for language models.
 
 > ⚠️ The library is in early stages of development and likely to have breaking API changes.
 
