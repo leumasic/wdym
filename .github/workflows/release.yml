@@ -42,25 +42,48 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pypa/cibuildwheel@v4.3.4
+        with:
+          package-dir: bindings/python
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
-  build-sdist:
+  build-node-addon:
     needs: check-version
     if: needs.check-version.outputs.is_new == 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            image: quay.io/pypa/manylinux_2_34_x86_64
+          - os: ubuntu-24.04-arm
+            image: quay.io/pypa/manylinux_2_34_aarch64
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - run: pipx run build --sdist
+      - name: Install build tools
+        run: |
+          curl -Ls https://micro.mamba.pm/api/micromamba/linux-$(uname -m | sed s/x86_64/64/)/2.10.0 | tar -xj -C /usr/local bin/micromamba
+          micromamba create -y -p /opt/build-tools -c conda-forge gxx=16.2 cmake=4.5 ninja nodejs=22
+          echo /opt/build-tools/bin >> "$GITHUB_PATH"
+      - name: Build the addon
+        env:
+          CC: /opt/build-tools/bin/gcc
+          CXX: /opt/build-tools/bin/g++
+          LDFLAGS: -static-libstdc++ -static-libgcc -s
+        run: cmake --preset node && cmake --build --preset node
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: sdist
-          path: dist/*.tar.gz
+          name: node-addon-${{ matrix.os }}
+          path: |
+            bindings/typescript/prebuilds
+            bindings/typescript/index.d.ts
 
-  publish:
-    needs: [check-version, build-wheels, build-sdist]
+  publish-pypi:
+    needs: [check-version, build-wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -68,20 +91,46 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8.0.2
         with:
+          pattern: wheels-*
           path: dist
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
 
+  publish-npm:
+    needs: [check-version, build-node-addon]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: node-addon-*
+          path: bindings/typescript
+          merge-multiple: true
+      - working-directory: bindings/typescript
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version
+          npm publish --provenance
+
   release:
-    needs: [check-version, publish]
+    needs: [check-version, publish-pypi, publish-npm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8.0.2
         with:
+          pattern: wheels-*
           path: dist
           merge-multiple: true
       - env:

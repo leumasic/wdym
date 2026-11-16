@@ -1,0 +1,56 @@
+[project]
+name = "wdym"
+dynamic = ["version"]
+description = "Fast subword tokenizers for language models"
+readme = "README.md"
+authors = [
+    { name = "leumasic", email = "53974949+leumasic@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "../../CMakeLists.txt" },
+    { file = "../../src/**/*" },
+    { file = "../**/*" },
+]
+
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+wheel.py-api = "cp312"
+cmake.source-dir = "../.."
+wheel.packages = ["wdym"]
+install.components = ["python"]
+# Until PyPI publishes CMake 4.5, building needs it on PATH. CI gets it from conda-forge (see below)
+# https://github.com/scikit-build/cmake-python-distributions/pull/746
+cmake.version = ">=4.5.0"
+ninja.version = ">=1.11"
+
+[tool.scikit-build.cmake.define]
+WDYM_BUILD_PYTHON = "ON"
+WDYM_BUILD_TESTS = "OFF"
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "../../CMakeLists.txt"
+regex = 'project\(wdym\s+VERSION\s+(?P<value>[0-9.]+)'
+
+[tool.cibuildwheel]
+# skip free-threaded python
+skip = ["cp3??t-*", "*-musllinux_*"]
+manylinux-x86_64-image = "manylinux_2_34"
+manylinux-aarch64-image = "manylinux_2_34"
+test-command = "python -c \"import wdym; tokenizer = wdym.BytePairEncoding.train(sentence_iterator=['hello world'], max_vocabulary_size=300); assert tokenizer.decode(tokenizer.encode('hello world')) == 'hello world'\""
+
+[tool.cibuildwheel.linux]
+# Drop cmake=4.5 installation using conda-forge when pypi publishes it
+before-all = [
+    "curl -Ls https://micro.mamba.pm/api/micromamba/linux-$(uname -m | sed s/x86_64/64/)/2.10.0 | tar -xj -C /usr/local bin/micromamba",
+    "micromamba create -y -p /opt/build-tools -c conda-forge gxx=16.2 cmake=4.5",
+]
+environment = { PATH = "/opt/build-tools/bin:$PATH", CC = "/opt/build-tools/bin/gcc", CXX = "/opt/build-tools/bin/g++", LDFLAGS = "-static-libstdc++ -static-libgcc" }

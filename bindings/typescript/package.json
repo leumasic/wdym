@@ -1,0 +1,44 @@
+{
+  "name": "@leumasic/wdym",
+  "version": "0.0.0",
+  "description": "Fast subword tokenizers for language models",
+  "license": "MIT",
+  "author": "leumasic",
+  "homepage": "https://github.com/leumasic/wdym",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leumasic/wdym.git",
+    "directory": "bindings/typescript"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "prebuilds/"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "cd ../.. && cmake --preset node && cmake --build --preset node"
+  }
+}

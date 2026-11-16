@@ -1,0 +1,3 @@
+# To avoid std includes when already handled by import statement
+Completion:
+  HeaderInsertion: Never

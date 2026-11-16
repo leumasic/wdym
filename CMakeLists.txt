@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 4.5)
 
-project(wdym VERSION 0.1.0 LANGUAGES CXX)
+project(wdym
+  VERSION 0.1.1
+  HOMEPAGE_URL "https://github.com/leumasic/wdym"
+  LANGUAGES CXX
+)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -10,57 +14,205 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" ON)
+option(WDYM_BUILD_PYTHON "Build the nanobind Python extension" OFF)
+option(WDYM_BUILD_NODE "Build the Node-API addon" OFF)
+option(WDYM_BUILD_TESTS "Build the test suite" ${PROJECT_IS_TOP_LEVEL})
 
-include(GNUInstallDirs)
+include(FetchContent)
 
-# Wheel builds (SKBUILD) use a temporary build directory, so linking to it
-# would leave a dead link behind.
-if(NOT SKBUILD AND NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-  file(CREATE_LINK "${PROJECT_BINARY_DIR}/compile_commands.json" "${PROJECT_SOURCE_DIR}/compile_commands.json"
-    SYMBOLIC RESULT link_result)
-  if(NOT link_result EQUAL 0)
-    message(STATUS "Couldn't link compile_commands.json into the repository root (${link_result}); it's in ${PROJECT_BINARY_DIR}")
-  endif()
-endif()
+FetchContent_Declare(unordered_dense
+  GIT_REPOSITORY https://github.com/martinus/unordered_dense.git
+  GIT_TAG        v5.3.3
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(unordered_dense)
 
-add_library(wdym STATIC core/tokenizer.cpp)
+FetchContent_Declare(darts_clone
+  GIT_REPOSITORY https://github.com/s-yata/darts-clone.git
+  GIT_TAG        v0.32h
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(darts_clone)
+
+set(FLATBUFFERS_BUILD_TESTS OFF)
+FetchContent_Declare(flatbuffers
+  GIT_REPOSITORY https://github.com/google/flatbuffers.git
+  GIT_TAG        v25.12.19
+  GIT_SHALLOW    TRUE
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
+FetchContent_MakeAvailable(flatbuffers)
+
+set(WDYM_SCHEMAS
+  ${PROJECT_SOURCE_DIR}/src/normalization.fbs
+  ${PROJECT_SOURCE_DIR}/src/markup_token.fbs
+  ${PROJECT_SOURCE_DIR}/src/tokenizers/bpe.fbs
+  ${PROJECT_SOURCE_DIR}/src/tokenizer.fbs)
+set(WDYM_GENERATED_DIR ${PROJECT_BINARY_DIR}/generated)
+set(WDYM_GENERATED_HEADERS
+  ${WDYM_GENERATED_DIR}/normalization_generated.h
+  ${WDYM_GENERATED_DIR}/markup_token_generated.h
+  ${WDYM_GENERATED_DIR}/bpe_generated.h
+  ${WDYM_GENERATED_DIR}/tokenizer_generated.h)
+
+add_custom_command(
+  OUTPUT ${WDYM_GENERATED_HEADERS}
+  COMMAND flatc --cpp --scoped-enums
+    -I ${PROJECT_SOURCE_DIR}/src
+    -o ${WDYM_GENERATED_DIR}
+    ${WDYM_SCHEMAS}
+  DEPENDS flatc ${WDYM_SCHEMAS}
+  VERBATIM
+)
+
+add_library(wdym STATIC
+  src/normalization.cpp
+  src/tokenizers/byte_level_bpe.cpp
+  src/tokenizers/bpe.cpp
+  ${WDYM_GENERATED_HEADERS}
+)
 add_library(wdym::wdym ALIAS wdym)
 
-target_include_directories(wdym PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_compile_features(wdym PUBLIC cxx_std_23)
+target_sources(wdym PUBLIC
+  FILE_SET CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/src FILES
+    src/wdym.cppm
+    src/utils/containers.cppm
+    src/utils/double_array_trie.cppm
+    src/utils/utf8.cppm
+    src/markup_token.cppm
+    src/normalization.cppm
+    src/word_splitting.cppm
+    src/tokenizer.cppm
+    src/tokenizers/bpe.cppm
+    src/tokenizers/byte_level_bpe.cppm)
+target_sources(wdym PRIVATE
+  FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/src FILES
+    src/tokenizer_file.cppm)
+target_compile_features(wdym PUBLIC cxx_std_26)
+target_compile_options(wdym PRIVATE -Wall -Wextra)
+# BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export
+target_link_libraries(wdym PRIVATE $<BUILD_INTERFACE:unordered_dense::unordered_dense>)
+target_include_directories(wdym SYSTEM PRIVATE
+  $<BUILD_INTERFACE:${darts_clone_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${WDYM_GENERATED_DIR}>)
 set_target_properties(wdym PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+if (WDYM_BUILD_PYTHON OR WDYM_BUILD_NODE)
+  add_library(wdym_binding_reflection STATIC)
+  target_sources(wdym_binding_reflection PUBLIC
+    FILE_SET CXX_MODULES FILES bindings/binding_reflection.cppm)
+  target_compile_features(wdym_binding_reflection PUBLIC cxx_std_26)
+  target_compile_options(wdym_binding_reflection PUBLIC -freflection)
+  set_target_properties(wdym_binding_reflection PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 if (WDYM_BUILD_PYTHON)
   find_package(Python 3.12 COMPONENTS Interpreter Development.Module REQUIRED
     OPTIONAL_COMPONENTS Development.SABIModule)
 
-  # Detect the installed nanobind package and import it into CMake
+  FetchContent_Declare(nanobind
+    GIT_REPOSITORY https://github.com/wjakob/nanobind.git
+    GIT_TAG        v3.1.0
+    GIT_SHALLOW    TRUE
+    EXCLUDE_FROM_ALL
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(nanobind)
+
+  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI NOMINSIZE bindings/python/wdym_binding.cpp)
+  target_link_libraries(wdym_ext PRIVATE wdym::wdym wdym_binding_reflection)
+  # nanobind's old CMake policy range turns off module scanning for its targets
+  set_target_properties(wdym_ext PROPERTIES CXX_SCAN_FOR_MODULES ON)
+  install(TARGETS wdym_ext LIBRARY DESTINATION wdym COMPONENT python EXCLUDE_FROM_ALL)
+endif()
+
+if (WDYM_BUILD_NODE)
+  FetchContent_Declare(node_api_headers
+    GIT_REPOSITORY https://github.com/nodejs/node-api-headers.git
+    GIT_TAG        v1.9.0
+    GIT_SHALLOW    TRUE
+    EXCLUDE_FROM_ALL
+    SYSTEM
+  )
+  FetchContent_Declare(node_addon_api
+    GIT_REPOSITORY https://github.com/nodejs/node-addon-api.git
+    GIT_TAG        v8.9.2
+    GIT_SHALLOW    TRUE
+    EXCLUDE_FROM_ALL
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(node_api_headers node_addon_api)
+
+  find_program(NODE_EXECUTABLE node REQUIRED)
   execute_process(
-    COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-    OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
-  find_package(nanobind CONFIG REQUIRED)
+    COMMAND "${NODE_EXECUTABLE}" -p "process.platform + '-' + process.arch"
+    OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE WDYM_NODE_PLATFORM
+    COMMAND_ERROR_IS_FATAL ANY)
 
-  nanobind_add_module(wdym_ext NB_STATIC STABLE_ABI bindings/wdymBinding.cpp)
-  target_link_libraries(wdym_ext PRIVATE wdym::wdym)
-  install(TARGETS wdym_ext LIBRARY DESTINATION wdym)
+  add_library(wdym_node MODULE bindings/typescript/wdym_binding.cpp)
+  target_link_libraries(wdym_node PRIVATE wdym::wdym wdym_binding_reflection)
+  target_include_directories(wdym_node SYSTEM PRIVATE
+    ${node_api_headers_SOURCE_DIR}/include
+    ${node_addon_api_SOURCE_DIR})
+
+  target_compile_definitions(wdym_node PRIVATE
+    NODE_ADDON_API_CPP_EXCEPTIONS
+    NODE_ADDON_API_CPP_EXCEPTIONS_ALL)
+
+  # Bind calls to the addon's own definitions, not to older copies in the
+  # libstdc++ Node loaded
+  target_link_options(wdym_node PRIVATE -Wl,-Bsymbolic)
+
+  set_target_properties(wdym_node PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME wdym
+    SUFFIX .node
+    CXX_VISIBILITY_PRESET hidden
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bindings/typescript/prebuilds/${WDYM_NODE_PLATFORM})
+
+  add_executable(wdym_typescript_declarations bindings/typescript/declarations.cpp)
+  target_link_libraries(wdym_typescript_declarations PRIVATE wdym::wdym wdym_binding_reflection)
+  set(WDYM_TYPESCRIPT_DECLARATIONS ${PROJECT_SOURCE_DIR}/bindings/typescript/index.d.ts)
+  add_custom_command(
+    OUTPUT ${WDYM_TYPESCRIPT_DECLARATIONS}
+    COMMAND wdym_typescript_declarations ${WDYM_TYPESCRIPT_DECLARATIONS}
+    DEPENDS wdym_typescript_declarations
+    VERBATIM)
+  add_custom_target(wdym_typescript_declarations_file DEPENDS ${WDYM_TYPESCRIPT_DECLARATIONS})
+  add_dependencies(wdym_node wdym_typescript_declarations_file)
 endif()
 
-if (NOT SKBUILD)
-  include(CMakePackageConfigHelpers)
-
-  install(TARGETS wdym EXPORT wdymTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-  install(EXPORT wdymTargets NAMESPACE wdym::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)
-
-  file(WRITE ${PROJECT_BINARY_DIR}/wdymConfig.cmake
-    "include(\"\${CMAKE_CURRENT_LIST_DIR}/wdymTargets.cmake\")\n")
-  write_basic_package_version_file(${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
-    COMPATIBILITY SameMinorVersion)
-  install(FILES ${PROJECT_BINARY_DIR}/wdymConfig.cmake ${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)
+if (WDYM_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(FILES
+  ${unordered_dense_SOURCE_DIR}/include/ankerl/unordered_dense.h
+  ${unordered_dense_SOURCE_DIR}/include/ankerl/stl.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/wdym/third_party/ankerl)
+target_include_directories(wdym SYSTEM PUBLIC
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/wdym/third_party>)
+
+install(TARGETS wdym EXPORT wdymTargets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  FILE_SET CXX_MODULES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/wdym)
+install(EXPORT wdymTargets NAMESPACE wdym::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym
+  CXX_MODULES_DIRECTORY modules)
+
+file(WRITE ${PROJECT_BINARY_DIR}/wdymConfig.cmake
+  "include(\"\${CMAKE_CURRENT_LIST_DIR}/wdymTargets.cmake\")\n")
+write_basic_package_version_file(${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
+  COMPATIBILITY SameMinorVersion)
+install(FILES ${PROJECT_BINARY_DIR}/wdymConfig.cmake ${PROJECT_BINARY_DIR}/wdymConfigVersion.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/wdym)

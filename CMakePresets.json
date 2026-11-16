@@ -1,0 +1,58 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "dev",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "python",
+      "inherits": "dev",
+      "cacheVariables": {
+        "Python_EXECUTABLE": "${sourceDir}/bindings/python/.venv/bin/python",
+        "WDYM_BUILD_PYTHON": "ON"
+      }
+    },
+    {
+      "name": "node",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/node",
+      "cacheVariables": {
+        "WDYM_BUILD_PYTHON": "OFF",
+        "WDYM_BUILD_TESTS": "OFF",
+        "WDYM_BUILD_NODE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "node",
+      "configurePreset": "node",
+      "targets": ["wdym_node"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "steps": [
+        { "type": "configure", "name": "dev" },
+        { "type": "build", "name": "dev" },
+        { "type": "test", "name": "dev" }
+      ]
+    }
+  ]
+}

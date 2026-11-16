@@ -1,2 +1,11 @@
-BasedOnStyle: LLVM
+BasedOnStyle: Chromium
+
+DerivePointerAlignment: false
 PointerAlignment: Left
+ColumnLimit: 100
+AlignAfterOpenBracket: BlockIndent
+PenaltyReturnTypeOnItsOwnLine: 1000
+BreakAfterOpenBracketLoop: true
+BreakBeforeCloseBracketLoop: true
+BreakBinaryOperations: RespectPrecedence
+PackArguments: {BinPack: OnePerLine}

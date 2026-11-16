@@ -1,29 +1,51 @@
-FROM nvcr.io/nvidia/pytorch:26.01-py3
+FROM docker.io/library/fedora:44
 
-# Install prerequisites for Neovim and LazyVim (git, curl, build essentials, ripgrep, fd-find)
-RUN apt-get update && apt-get install -y \
+RUN dnf install -y \
     curl \
     git \
-    build-essential \
+    gcc \
+    gcc-c++ \
+    make \
+    ninja-build \
+    tar \
+    gzip \
+    findutils \
+    which \
+    python3-devel \
+    nodejs \
+    npm \
     ripgrep \
     fd-find \
-    && rm -rf /var/lib/apt/lists/*
+    && dnf clean all
 
-# Download and install the latest stable Neovim binary tarball
+ENV CC=gcc
+ENV CXX=g++
+
 RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
     && tar -C /opt -xzf nvim-linux-x86_64.tar.gz \
     && rm nvim-linux-x86_64.tar.gz
 
+ARG LAZYGIT_VERSION=0.66.2
+RUN curl -fLo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz" \
+    && tar -xzf lazygit.tar.gz lazygit \
+    && install lazygit /usr/local/bin/ \
+    && rm lazygit lazygit.tar.gz
+
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 RUN ~/.fzf/install --all
 
-# Add Neovim to PATH
 ENV PATH="/opt/nvim-linux-x86_64/bin:${PATH}"
 
-# Install uv, which builds the project's virtual environment from pyproject.toml and uv.lock
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Activate the project's venv for every process in the container. `uv sync` creates it in
-# the bind-mounted repo, so it doesn't exist until that has been run once.
-ENV VIRTUAL_ENV=/workspace/.venv
-ENV PATH="/workspace/.venv/bin:${PATH}"
+# TODO: Move installation of cmake 4.5.0 to pyproject.toml once it gets published on pypi
+RUN curl -fL https://github.com/Kitware/CMake/releases/download/v4.5.0-rc2/cmake-4.5.0-rc2-linux-x86_64.tar.gz \
+    | tar -C /opt -xz
+
+ENV PATH="/opt/cmake-4.5.0-rc2-linux-x86_64/bin:${PATH}"
+
+ENV CLANGD_FLAGS=--experimental-modules-support
+COPY clangd.yaml /root/.config/clangd/config.yaml
+
+ENV VIRTUAL_ENV=/workspace/bindings/python/.venv
+ENV PATH="/workspace/bindings/python/.venv/bin:${PATH}"

@@ -1,0 +1,15 @@
+include "normalization.fbs";
+include "tokenizers/bpe.fbs";
+
+namespace wdym.schema;
+
+union Model { BytePairEncoding }
+
+table Tokenizer {
+  normalizer: Normalizer;
+  model: Model;
+}
+
+root_type Tokenizer;
+file_identifier "WDYM";
+/// What a stroke of genius that the library name is 4 characters long

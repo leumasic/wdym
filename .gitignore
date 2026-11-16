@@ -219,5 +219,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# clangd compilation database, linked into the repository root by CMakeLists.txt
-compile_commands.json
+
+# Personal dev container settings
+.dev/compose.personal.yaml
+# Node-API addon builds
+bindings/typescript/prebuilds/
+bindings/typescript/index.d.ts
