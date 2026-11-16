@@ -62,7 +62,18 @@ TBD
 
 ## Benchmarks
 
-TBD
+With every library configured to train equivalent BPE tokenizers of 32,000 tokens, on 50 MB of English web text from FineWeb for training and 5 MB for encoding:
+
+| | wdym | SentencePiece | Hugging Face tokenizers |
+|---|---|---|---|
+| Encoding, 1 thread (MB/s) | 75.7 | 48.7 | 8.7 |
+| Encoding, 32 threads (MB/s) | 961.7 | 629.7 | 64.4 |
+| Training, 1 thread (seconds) | 1.0 | 3.1 | 5.9 |
+| Training, 32 threads (seconds) | n/a | 1.4 | 4.4 |
+
+Encoding is measured from C++ for wdym and for SentencePiece, through its new runtime SentencePiece Lite, and from Rust for Hugging Face tokenizers. wdym trains on one thread only.
+
+See [benchmarks](benchmarks/README.md) for 128,000-token vocabularies, memory use, Python, the method, the hardware and how to run them yourself.
 
 ## Building from source
 
@@ -78,8 +89,6 @@ cmake --workflow --preset dev
 For a ready-made environment, the `.dev` folder has a container image with these tools installed, along with a compose file.
 
 ## Roadmap
-
-The following is a non-comprehensive list of additions I'd like to work on.
 
 ### Tokenizers
 

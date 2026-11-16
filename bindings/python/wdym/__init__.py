@@ -8,6 +8,7 @@ from wdym.wdym_ext import (
     NormalizationStep,
     ReplacementRule,
     KeepInvalidUtf8,
+    TokenIdBatch,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "NormalizationStep",
     "ReplacementRule",
     "KeepInvalidUtf8",
+    "TokenIdBatch",
 ]

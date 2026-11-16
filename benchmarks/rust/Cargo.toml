@@ -1,0 +1,8 @@
+[package]
+name = "huggingface_benchmarks"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rayon = "1"
+tokenizers = "=0.23.2"

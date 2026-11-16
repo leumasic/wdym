@@ -225,3 +225,8 @@ __marimo__/
 # Node-API addon builds
 bindings/typescript/prebuilds/
 bindings/typescript/index.d.ts
+
+# Benchmark data, trained models and results
+benchmarks/data/
+benchmarks/models/
+benchmarks/results/
