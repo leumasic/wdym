@@ -16,7 +16,7 @@ Not published yet.
 The package includes TypeScript declarations.
 
 ```js
-import { BytePairEncoding } from "wdym";
+import { BytePairEncoding } from "@leumasic/wdym";
 
 const tokenizer = await BytePairEncoding.train({
   sentenceIterator: ["hello world", "the quick brown fox"],

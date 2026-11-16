@@ -1,5 +1,5 @@
 {
-  "name": "wdym",
+  "name": "@leumasic/wdym",
   "version": "0.0.0",
   "description": "Fast subword tokenizers for language models",
   "license": "MIT",
@@ -32,6 +32,9 @@
   "libc": [
     "glibc"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
