@@ -6,7 +6,11 @@
 
 ## Installation
 
-Not published yet.
+Install [`@leumasic/wdym`](https://www.npmjs.com/package/@leumasic/wdym) from npm:
+
+```sh
+npm install @leumasic/wdym
+```
 
 > [!NOTE]
 > **Requirement**: Node.js 20 or newer on Linux with glibc, on x64 or arm64.

@@ -7,7 +7,7 @@ wdym is a C++ tokenizer library with bindings for several languages.
 ## Features
 
 - ⚡ Fast training and encoding
-- 🧩 Custom text normalization driven by replacement rules, along with built-in presets
+- 🧩 Custom text normalization driven by replacement rules
 - 🛡️ Markup tokens kept separate from text, so user input can't inject them
 - 🔌 Bindings for Python and Node.js
 
@@ -101,7 +101,7 @@ The following is a non-comprehensive list of additions I'd like to work on.
 ### Bindings
 
 - [ ] Python: pickling, encoding and decoding of text and markup token parts, word cache, and NumPy arrays
-- [ ] Bindings for JavaScript runtimes (e.g. Node.js, Bun, etc)
+- [ ] Bindings for other JavaScript runtimes (e.g. Bun, Deno)
 - [ ] C API
 
 ## License
