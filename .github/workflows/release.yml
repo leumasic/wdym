@@ -22,7 +22,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(sed -nE 's/^project\(wdym VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          version=$(sed -nE '/^project\(wdym/,/\)/ s/.*VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           test -n "$version" || { echo "::error::No version found in CMakeLists.txt"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
