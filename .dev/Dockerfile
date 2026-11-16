@@ -47,5 +47,5 @@ ENV PATH="/opt/cmake-4.5.0-rc2-linux-x86_64/bin:${PATH}"
 ENV CLANGD_FLAGS=--experimental-modules-support
 COPY clangd.yaml /root/.config/clangd/config.yaml
 
-ENV VIRTUAL_ENV=/workspace/.venv
-ENV PATH="/workspace/.venv/bin:${PATH}"
+ENV VIRTUAL_ENV=/workspace/bindings/python/.venv
+ENV PATH="/workspace/bindings/python/.venv/bin:${PATH}"

@@ -42,25 +42,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pypa/cibuildwheel@v4.3.4
+        with:
+          package-dir: bindings/python
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
-  build-sdist:
-    needs: check-version
-    if: needs.check-version.outputs.is_new == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - run: pipx run build --sdist
-      - uses: actions/upload-artifact@v7.0.2
-        with:
-          name: sdist
-          path: dist/*.tar.gz
-
   publish:
-    needs: [check-version, build-wheels, build-sdist]
+    needs: [check-version, build-wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

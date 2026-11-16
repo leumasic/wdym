@@ -10,7 +10,7 @@
       "name": "python",
       "inherits": "dev",
       "cacheVariables": {
-        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
+        "Python_EXECUTABLE": "${sourceDir}/bindings/python/.venv/bin/python",
         "WDYM_BUILD_PYTHON": "ON"
       }
     },
