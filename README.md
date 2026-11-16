@@ -66,14 +66,14 @@ With every library configured to train equivalent BPE tokenizers of 32,000 token
 
 | | wdym | SentencePiece | Hugging Face tokenizers |
 |---|---|---|---|
-| Encoding, 1 thread (MB/s) | 75.7 | 48.7 | 8.7 |
-| Encoding, 32 threads (MB/s) | 961.7 | 629.7 | 64.4 |
+| Encoding, 1 thread (MB/s) | 76.2 | 49.1 | 9.2 |
+| Encoding, 32 threads (MB/s) | 926.4 | 609.6 | 77.8 |
 | Training, 1 thread (seconds) | 1.0 | 3.1 | 5.9 |
-| Training, 32 threads (seconds) | n/a | 1.4 | 4.4 |
+| Training, 32 threads (seconds) | n/a | 1.3 | 4.3 |
 
-Encoding is measured from C++ for wdym and for SentencePiece, through its new runtime SentencePiece Lite, and from Rust for Hugging Face tokenizers. wdym trains on one thread only.
+Every library is measured from its own language: C++ for wdym and SentencePiece, which encodes through its new runtime SentencePiece Lite, and Rust for Hugging Face tokenizers. wdym trains on one thread only.
 
-See [benchmarks](benchmarks/README.md) for 128,000-token vocabularies, memory use, Python, the method, the hardware and how to run them yourself.
+See [benchmarks](benchmarks/README.md) for 128,000-token vocabularies, memory use, the method, the hardware and how to run them yourself.
 
 ## Building from source
 
