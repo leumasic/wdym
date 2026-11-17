@@ -1,5 +1,4 @@
 #include <nanobind/nanobind.h>
-#include <nanobind/ndarray.h>
 #include <nanobind/operators.h>
 #include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/optional.h>
@@ -101,26 +100,6 @@ void bindStruct(nb::module_& m) {
   }
 
   cls.def(nb::self == nb::self);
-}
-
-template <typename Element>
-auto viewElements(std::vector<Element>& elements) {
-  return nb::ndarray<nb::memview, Element, nb::ndim<1>>(elements.data(), {elements.size()});
-}
-
-template <typename T>
-void bindStructOfVectors(nb::module_& m) {
-  static constexpr auto FIELDS = getFields(^^T);
-
-  nb::class_<T> cls(m, getIdentifier(^^T));
-
-  template for (constexpr auto field : FIELDS) {
-    cls.def_prop_ro(
-        getPythonFieldName(field),
-        [](T& structOfVectors) { return viewElements(structOfVectors.[:field:]); },
-        nb::rv_policy::reference_internal
-    );
-  }
 }
 
 class GilSafeObject {
@@ -263,19 +242,6 @@ void bindTokenizer(nb::module_& m) {
           "text"_a
       )
       .def(
-          "encode_batch",
-          [](const T& tokenizer, const std::vector<nb::str>& texts, std::size_t threadCount) {
-            std::vector<std::string_view> textViews;
-            for (const nb::str& text : texts)
-              textViews.push_back(nb::cast<std::string_view>(text));
-
-            nb::gil_scoped_release release;
-            return tokenizer.encodeBatch(textViews, threadCount);
-          },
-          "texts"_a,
-          "thread_count"_a = 1
-      )
-      .def(
           "decode",
           [](const T& tokenizer,
              const std::vector<std::uint32_t>& tokenIds,
@@ -328,7 +294,6 @@ NB_MODULE(wdym_ext, m) {
   bindStruct<wdym::ByteFallback>(m);
   bindStruct<wdym::BytePairEncodingSettings>(m);
   bindStruct<wdym::BytePairEncodingDecodeOptions>(m);
-  bindStructOfVectors<wdym::TokenIdBatch>(m);
 
   bindTokenizer<wdym::BytePairEncoding>(m);
 }

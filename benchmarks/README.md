@@ -27,7 +27,7 @@ All three libraries are configured to train the same kind of tokenizer, so their
 
 | Library | Settings |
 |---|---|
-| wdym | defaults (`wordDelimiter = " "`, `wordPrefix = "▁"`); `encodeBatch` takes the thread count |
+| wdym | defaults (`wordDelimiter = " "`, `wordPrefix = "▁"`) |
 | SentencePiece | `spm_train` with `--model_type=bpe`, `--normalization_rule_name=identity`, `--character_coverage=1.0`, `--byte_fallback=false`, `--split_by_unicode_script=false`, `--split_by_number=false`, `--max_sentencepiece_length=512`, `--max_sentence_length=1048576`, `--input_sentence_size=0`, `--bos_id=-1`, `--eos_id=-1`, `--num_threads` set to the thread count |
 | Hugging Face tokenizers | `BPE` model, `Metaspace::new('▁', PrependScheme::Always, true)` pre-tokenizer, thread pool sized to the thread count, parallelism switched off with one thread |
 
@@ -44,7 +44,7 @@ Each library encodes every line of `test.txt` separately. Throughput is the UTF-
 wdym and SentencePiece Lite are called from C++, and Hugging Face tokenizers from Rust through `encode_fast` and `encode_batch_fast`, which skip character offsets. SentencePiece Lite encodes with the model trained by SentencePiece after converting it with Lite's `spm_to_fb` tool.
 
 - With one thread, each line is encoded by its own call. wdym and SentencePiece Lite are measured with and without their 1 MB word cache, which starts empty on each pass. Hugging Face tokenizers always uses its built-in cache of 10,000 words, which stays filled between passes.
-- With 32 threads, all the lines are encoded as one batch of token IDs: `encodeBatch` for wdym, which doesn't use the word cache, and `encode_batch_fast` for Hugging Face tokenizers. SentencePiece Lite has no batch call, so the benchmark splits the lines between its own threads the same way `encodeBatch` does, with one cache per thread.
+- With 32 threads, all the lines are encoded as one batch of token IDs. wdym and SentencePiece Lite have no batch call, so the benchmark splits the lines evenly between its own threads, measured with and without one word cache per thread. Hugging Face tokenizers uses `encode_batch_fast`.
 
 ## Results
 

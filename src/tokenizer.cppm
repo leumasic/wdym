@@ -11,11 +11,6 @@ import :normalization;
 export namespace wdym {
 using TextStream = std::generator<std::string_view>;
 
-struct TokenIdBatch {
-  std::vector<std::uint32_t> tokenIds;
-  std::vector<std::size_t> tokenIdOffsets;
-};
-
 template <typename T>
 concept Tokenizer = requires(
     const T& tokenizer,

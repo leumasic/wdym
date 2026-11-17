@@ -124,7 +124,6 @@ class BytePairEncoding : public TokenizerBase<
       std::vector<uint32_t>& tokenIds,
       std::optional<WordCache&> cache = std::nullopt
   ) const;
-  TokenIdBatch encodeBatch(std::span<const std::string_view> texts, size_t threadCount = 1) const;
 
   std::vector<uint32_t> encodeNormalized(std::string_view text) const;
   void encodeNormalized(

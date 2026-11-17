@@ -3,12 +3,66 @@ import wdym;
 
 using Clock = std::chrono::steady_clock;
 
+struct TokenIdBatch {
+  std::vector<std::uint32_t> tokenIds;
+  std::vector<std::size_t> tokenIdOffsets;
+};
+
 std::vector<std::string> readLines(const std::string& path) {
   std::ifstream file(path, std::ios::binary);
   std::vector<std::string> lines;
   for (std::string line; std::getline(file, line);)
     lines.push_back(line);
   return lines;
+}
+
+TokenIdBatch encodeBatch(
+    const wdym::BytePairEncoding& tokenizer,
+    std::span<const std::string> texts,
+    std::size_t threadCount,
+    bool useCache
+) {
+  TokenIdBatch batch{.tokenIds = {}, .tokenIdOffsets = std::vector<std::size_t>(texts.size() + 1)};
+  std::vector<std::vector<std::uint32_t>> chunkTokenIds(threadCount);
+
+  const auto encodeChunk = [&](std::size_t chunkIndex) {
+    std::vector<std::uint32_t> tokenIds;
+    std::optional<wdym::BytePairEncoding::WordCache> cache;
+    if (useCache)
+      cache.emplace();
+
+    const std::size_t firstTextIndex = texts.size() * chunkIndex / threadCount;
+    const std::size_t endTextIndex = texts.size() * (chunkIndex + 1) / threadCount;
+
+    for (std::size_t textIndex = firstTextIndex; textIndex < endTextIndex; ++textIndex) {
+      const std::size_t tokenIdCountBeforeText = tokenIds.size();
+      if (useCache)
+        tokenizer.encode(texts[textIndex], tokenIds, *cache);
+      else
+        tokenizer.encode(texts[textIndex], tokenIds);
+      batch.tokenIdOffsets[textIndex + 1] = tokenIds.size() - tokenIdCountBeforeText;
+    }
+
+    chunkTokenIds[chunkIndex] = std::move(tokenIds);
+  };
+
+  {
+    std::vector<std::jthread> threads;
+    for (std::size_t chunkIndex = 1; chunkIndex < threadCount; ++chunkIndex)
+      threads.emplace_back(encodeChunk, chunkIndex);
+
+    encodeChunk(0);
+  }
+
+  std::partial_sum(
+      batch.tokenIdOffsets.begin(), batch.tokenIdOffsets.end(), batch.tokenIdOffsets.begin()
+  );
+
+  batch.tokenIds.reserve(batch.tokenIdOffsets.back());
+  for (const std::vector<std::uint32_t>& tokenIds : chunkTokenIds)
+    batch.tokenIds.append_range(tokenIds);
+
+  return batch;
 }
 
 int main(int argc, char** argv) {
@@ -40,46 +94,37 @@ int main(int argc, char** argv) {
     );
   };
 
-  if (threadCount > 1) {
-    const std::vector<std::string_view> texts(std::from_range, lines);
-    double bestSeconds = std::numeric_limits<double>::infinity();
-    std::size_t tokenCount = 0;
-
-    for (int repeat = 0; repeat < repeats; ++repeat) {
-      const auto start = Clock::now();
-      const wdym::TokenIdBatch batch = tokenizer.encodeBatch(texts, threadCount);
-      bestSeconds = std::min(bestSeconds, std::chrono::duration<double>(Clock::now() - start).count());
-      tokenCount = batch.tokenIds.size();
-    }
-
-    printResult(false, tokenCount, bestSeconds);
-    return 0;
-  }
-
-  const auto benchmarkLineByLineEncoding = [&](bool useCache) {
+  const auto benchmarkEncoding = [&](bool useCache) {
     double bestSeconds = std::numeric_limits<double>::infinity();
     std::size_t tokenCount = 0;
     std::vector<std::uint32_t> tokenIds;
 
     for (int repeat = 0; repeat < repeats; ++repeat) {
-      wdym::BytePairEncoding::WordCache cache;
-      tokenCount = 0;
+      if (threadCount > 1) {
+        const auto start = Clock::now();
+        const TokenIdBatch batch = encodeBatch(tokenizer, lines, threadCount, useCache);
+        bestSeconds = std::min(bestSeconds, std::chrono::duration<double>(Clock::now() - start).count());
+        tokenCount = batch.tokenIds.size();
+      } else {
+        wdym::BytePairEncoding::WordCache cache;
+        tokenCount = 0;
 
-      const auto start = Clock::now();
-      for (const std::string& line : lines) {
-        tokenIds.clear();
-        if (useCache)
-          tokenizer.encode(line, tokenIds, cache);
-        else
-          tokenizer.encode(line, tokenIds);
-        tokenCount += tokenIds.size();
+        const auto start = Clock::now();
+        for (const std::string& line : lines) {
+          tokenIds.clear();
+          if (useCache)
+            tokenizer.encode(line, tokenIds, cache);
+          else
+            tokenizer.encode(line, tokenIds);
+          tokenCount += tokenIds.size();
+        }
+        bestSeconds = std::min(bestSeconds, std::chrono::duration<double>(Clock::now() - start).count());
       }
-      bestSeconds = std::min(bestSeconds, std::chrono::duration<double>(Clock::now() - start).count());
     }
 
     printResult(useCache, tokenCount, bestSeconds);
   };
 
-  benchmarkLineByLineEncoding(false);
-  benchmarkLineByLineEncoding(true);
+  benchmarkEncoding(false);
+  benchmarkEncoding(true);
 }

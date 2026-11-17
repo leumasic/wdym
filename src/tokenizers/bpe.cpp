@@ -671,50 +671,6 @@ void BytePairEncoding::encode(
   encodeNormalized(normalizer_.normalize(text, normalizationBuffer), tokenIds, cache);
 }
 
-wdym::TokenIdBatch BytePairEncoding::encodeBatch(
-    std::span<const std::string_view> texts,
-    size_t threadCount
-) const {
-  if (threadCount == 0)
-    throw std::invalid_argument("threadCount must be at least 1");
-
-  TokenIdBatch batch{.tokenIds = {}, .tokenIdOffsets = std::vector<size_t>(texts.size() + 1)};
-  std::vector<std::vector<uint32_t>> chunkTokenIds(threadCount);
-
-  const auto encodeChunk = [&](size_t chunkIndex) {
-    std::vector<uint32_t> tokenIds;
-
-    const size_t firstTextIndex = texts.size() * chunkIndex / threadCount;
-    const size_t endTextIndex = texts.size() * (chunkIndex + 1) / threadCount;
-
-    for (size_t textIndex = firstTextIndex; textIndex < endTextIndex; ++textIndex) {
-      const size_t tokenIdCountBeforeText = tokenIds.size();
-      encode(texts[textIndex], tokenIds);
-      batch.tokenIdOffsets[textIndex + 1] = tokenIds.size() - tokenIdCountBeforeText;
-    }
-
-    chunkTokenIds[chunkIndex] = std::move(tokenIds);
-  };
-
-  {
-    std::vector<std::jthread> threads;
-    for (size_t chunkIndex = 1; chunkIndex < threadCount; ++chunkIndex)
-      threads.emplace_back(encodeChunk, chunkIndex);
-
-    encodeChunk(0);
-  }
-
-  std::partial_sum(
-      batch.tokenIdOffsets.begin(), batch.tokenIdOffsets.end(), batch.tokenIdOffsets.begin()
-  );
-
-  batch.tokenIds.reserve(batch.tokenIdOffsets.back());
-  for (const std::vector<uint32_t>& tokenIds : chunkTokenIds)
-    batch.tokenIds.append_range(tokenIds);
-
-  return batch;
-}
-
 std::vector<uint32_t> BytePairEncoding::encodeNormalized(std::string_view text) const {
   std::vector<uint32_t> tokenIds;
   encodeNormalized(text, tokenIds);
