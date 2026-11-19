@@ -33,12 +33,17 @@ StringKeyMap<uint64_t> getWordToCount(
   for (const auto text : texts) {
     const auto normalizedText = normalizer.normalize(text, normalizationBuffer);
 
-    splitWords(normalizedText, settings.wordDelimiter, [&](std::string_view word) {
-      if (auto it = wordToCount.find(word); it != wordToCount.end())
-        ++it->second;
-      else
-        wordToCount.emplace(word, 1);
-    });
+    splitWords(
+        normalizedText,
+        settings.wordDelimiter,
+        settings.extraWordDelimiters,
+        [&](std::string_view word) {
+          if (auto it = wordToCount.find(word); it != wordToCount.end())
+            ++it->second;
+          else
+            wordToCount.emplace(word, 1);
+        }
+    );
   }
 
   return wordToCount;
@@ -87,7 +92,29 @@ void splitWordSymbols(
   const bool hasPrefix = !settings.wordPrefix.empty();
   const bool hasSuffix = !settings.wordSuffix.empty();
 
-  if (hasPrefix && !settings.adjoinPrefix)
+  size_t extraPrefixCount = 0;
+  size_t extraSuffixCount = 0;
+
+  if (!settings.wordDelimiter.empty()) {
+    if (settings.extraWordDelimiters == wdym::ExtraWordDelimiters::PrefixNextWord)
+      while (word.starts_with(settings.wordDelimiter)) {
+        word.remove_prefix(settings.wordDelimiter.size());
+        ++extraPrefixCount;
+      }
+    else if (settings.extraWordDelimiters == wdym::ExtraWordDelimiters::SuffixPreviousWord)
+      while (word.ends_with(settings.wordDelimiter)) {
+        word.remove_suffix(settings.wordDelimiter.size());
+        ++extraSuffixCount;
+      }
+  }
+
+  for (size_t extraPrefixIndex = 0; extraPrefixIndex < extraPrefixCount; ++extraPrefixIndex)
+    onSymbol(settings.wordPrefix);
+
+  const bool hasSeparatePrefix = hasPrefix && (!settings.adjoinPrefix || word.empty());
+  const bool hasSeparateSuffix = hasSuffix && (!settings.adjoinSuffix || word.empty());
+
+  if (hasSeparatePrefix)
     onSymbol(settings.wordPrefix);
 
   bool isFirstCharacter = true;
@@ -123,7 +150,10 @@ void splitWordSymbols(
     }
   }
 
-  if (hasSuffix && !settings.adjoinSuffix)
+  if (hasSeparateSuffix)
+    onSymbol(settings.wordSuffix);
+
+  for (size_t extraSuffixIndex = 0; extraSuffixIndex < extraSuffixCount; ++extraSuffixIndex)
     onSymbol(settings.wordSuffix);
 }
 
@@ -158,6 +188,16 @@ wdym::BytePairEncodingSettings getValidatedSettings(wdym::BytePairEncodingSettin
   )
     if (!wdym::isValidUtf8(text))
       throw std::invalid_argument(std::format("{} {:?} is not valid UTF-8", name, text));
+
+  if (settings.extraWordDelimiters == wdym::ExtraWordDelimiters::PrefixNextWord &&
+      settings.wordPrefix.empty())
+    throw std::invalid_argument("extraWordDelimiters is PrefixNextWord but wordPrefix is empty");
+
+  if (settings.extraWordDelimiters == wdym::ExtraWordDelimiters::SuffixPreviousWord &&
+      settings.wordSuffix.empty())
+    throw std::invalid_argument(
+        "extraWordDelimiters is SuffixPreviousWord but wordSuffix is empty"
+    );
 
   if (const auto* stringFallback = std::get_if<std::string>(&settings.unknownCharacterFallback);
       stringFallback != nullptr) {
@@ -306,7 +346,9 @@ StringKeyMap<uint32_t> buildWordToWholeWordSymbolId(
       std::string_view word = symbol;
       word.remove_prefix(settings.wordPrefix.size());
       word.remove_suffix(settings.wordSuffix.size());
-      wordToWholeWordSymbolId.emplace(word, symbolId);
+
+      if (settings.wordDelimiter.empty() || !word.contains(settings.wordDelimiter))
+        wordToWholeWordSymbolId.emplace(word, symbolId);
     }
   }
 
@@ -339,9 +381,12 @@ std::vector<uint32_t> buildSymbolIdToTokenId(const StringKeySet& symbols) {
 std::vector<wdym::TokenSource> buildTokenIdToTokenSource(
     const StringKeySet& symbols,
     const std::vector<uint32_t>& symbolIdToTokenId,
-    const StringKeyMap<uint32_t>& markupTokenToTokenId
+    const StringKeyMap<uint32_t>& markupTokenToTokenId,
+    const std::vector<wdym::DecodeOnlyToken>& decodeOnlyTokens
 ) {
-  std::vector<wdym::TokenSource> tokenIdToTokenSource(symbols.size() + markupTokenToTokenId.size());
+  std::vector<wdym::TokenSource> tokenIdToTokenSource(
+      symbols.size() + markupTokenToTokenId.size() + decodeOnlyTokens.size()
+  );
 
   for (uint32_t symbolId = 0; symbolId < symbols.size(); ++symbolId)
     tokenIdToTokenSource[symbolIdToTokenId[symbolId]] = {.isMarkupToken = false, .index = symbolId};
@@ -351,6 +396,9 @@ std::vector<wdym::TokenSource> buildTokenIdToTokenSource(
         .isMarkupToken = true,
         .index = markupIndex,
     };
+
+  for (const auto [tokenId, symbolId] : decodeOnlyTokens)
+    tokenIdToTokenSource[tokenId] = {.isMarkupToken = false, .index = symbolId};
 
   return tokenIdToTokenSource;
 }
@@ -535,7 +583,8 @@ BytePairEncoding::BytePairEncoding(
     StringKeySet symbols,
     unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId,
     StringKeyMap<uint32_t> markupTokenToTokenId,
-    std::vector<uint32_t> symbolIdToTokenId
+    std::vector<uint32_t> symbolIdToTokenId,
+    std::vector<DecodeOnlyToken> decodeOnlyTokens
 )
     : TokenizerBase(std::move(normalizer)),
       settings_(std::move(settings)),
@@ -543,9 +592,13 @@ BytePairEncoding::BytePairEncoding(
       pairKeyToMergedSymbolId_(std::move(pairKeyToMergedSymbolId)),
       markupTokenToTokenId_(std::move(markupTokenToTokenId)),
       symbolIdToTokenId_(std::move(symbolIdToTokenId)),
-      tokenIdToTokenSource_(
-          buildTokenIdToTokenSource(symbols_, symbolIdToTokenId_, markupTokenToTokenId_)
-      ),
+      decodeOnlyTokens_(std::move(decodeOnlyTokens)),
+      tokenIdToTokenSource_(buildTokenIdToTokenSource(
+          symbols_,
+          symbolIdToTokenId_,
+          markupTokenToTokenId_,
+          decodeOnlyTokens_
+      )),
       wordToWholeWordSymbolId_(buildWordToWholeWordSymbolId(settings_, symbols_)) {}
 
 std::span<const uint32_t> BytePairEncoding::WordCache::find(std::string_view word, uint64_t hash) {
@@ -686,30 +739,34 @@ void BytePairEncoding::encodeNormalized(
       settings_, symbols_, pairKeyToMergedSymbolId_, symbolIdToTokenId_, findFallbackTokenId()
   );
 
-  splitWords(text, settings_.wordDelimiter, [&](std::string_view word) {
-    const auto wordHash = wordToWholeWordSymbolId_.hash_for(word);
+  splitWords(
+      text, settings_.wordDelimiter, settings_.extraWordDelimiters, [&](std::string_view word) {
+        const auto wordHash = wordToWholeWordSymbolId_.hash_for(word);
 
-    if (const auto it = wordToWholeWordSymbolId_.find(word, wordHash);
-        it != wordToWholeWordSymbolId_.end()) {
-      tokenIds.push_back(symbolIdToTokenId_[it->second]);
-      return;
-    }
+        if (const auto it = wordToWholeWordSymbolId_.find(word, wordHash);
+            it != wordToWholeWordSymbolId_.end()) {
+          tokenIds.push_back(symbolIdToTokenId_[it->second]);
+          return;
+        }
 
-    if (!cache.has_value()) {
-      rankedMergeEncoder.encode(word, tokenIds);
-      return;
-    }
+        if (!cache.has_value()) {
+          rankedMergeEncoder.encode(word, tokenIds);
+          return;
+        }
 
-    if (const auto cachedTokenIds = cache->find(word, wordHash.m_mixed_hash);
-        !cachedTokenIds.empty()) {
-      tokenIds.append_range(cachedTokenIds);
-      return;
-    }
+        if (const auto cachedTokenIds = cache->find(word, wordHash.m_mixed_hash);
+            !cachedTokenIds.empty()) {
+          tokenIds.append_range(cachedTokenIds);
+          return;
+        }
 
-    const auto wordFirstTokenIdIndex = tokenIds.size();
-    rankedMergeEncoder.encode(word, tokenIds);
-    cache->insert(word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstTokenIdIndex));
-  });
+        const auto wordFirstTokenIdIndex = tokenIds.size();
+        rankedMergeEncoder.encode(word, tokenIds);
+        cache->insert(
+            word, wordHash.m_mixed_hash, std::span(tokenIds).subspan(wordFirstTokenIdIndex)
+        );
+      }
+  );
 }
 
 std::vector<uint32_t> BytePairEncoding::encodeParts(
@@ -768,12 +825,15 @@ std::vector<wdym::TextOrMarkupToken> BytePairEncoding::decodeParts(
 ) const {
   std::vector<TextOrMarkupToken> parts;
   std::string symbolText;
+  bool isFirstTextPart = true;
 
   const auto appendTextPart = [&](bool removeTrailingWordSuffix) {
     if (symbolText.empty())
       return;
 
-    const bool removeLeadingWordPrefix = parts.empty() && options.removeLeadingWordPrefix;
+    const bool removeLeadingWordPrefix = isFirstTextPart && options.removeLeadingWordPrefix;
+    isFirstTextPart = false;
+
     std::string text = decodeSymbolText(
         symbolText,
         removeLeadingWordPrefix,
@@ -887,7 +947,8 @@ std::vector<std::byte> BytePairEncoding::toBytes() const {
       settings_.adjoinPrefix,
       settings_.adjoinSuffix,
       unknownCharacterFallbackType,
-      unknownCharacterFallback
+      unknownCharacterFallback,
+      static_cast<schema::ExtraWordDelimiters>(std::to_underlying(settings_.extraWordDelimiters))
   );
 
   std::string symbolBytes;
@@ -907,6 +968,10 @@ std::vector<std::byte> BytePairEncoding::toBytes() const {
         schema::CreateMarkupToken(builder, builder.CreateString(markupToken), tokenId)
     );
 
+  std::vector<schema::DecodeOnlyToken> decodeOnlyTokens;
+  for (const auto [tokenId, symbolId] : decodeOnlyTokens_)
+    decodeOnlyTokens.emplace_back(tokenId, symbolId);
+
   const auto model = schema::CreateBytePairEncoding(
       builder,
       settings,
@@ -916,7 +981,8 @@ std::vector<std::byte> BytePairEncoding::toBytes() const {
       builder.CreateVector(symbolOffsets),
       builder.CreateVectorOfStructs(merges),
       builder.CreateVector(symbolIdToTokenId_),
-      builder.CreateVector(markupTokens)
+      builder.CreateVector(markupTokens),
+      builder.CreateVectorOfStructs(decodeOnlyTokens)
   );
   return finishTokenizerFile(builder, normalizer_, schema::Model::BytePairEncoding, model.Union());
 }
@@ -939,6 +1005,12 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
   settings.wordSuffix = toStringView(settingsTable->word_suffix());
   settings.adjoinPrefix = settingsTable->adjoin_prefix();
   settings.adjoinSuffix = settingsTable->adjoin_suffix();
+
+  if (settingsTable->extra_word_delimiters() > schema::ExtraWordDelimiters::MAX)
+    throw std::invalid_argument("the tokenizer file has an unreadable extraWordDelimiters");
+
+  settings.extraWordDelimiters =
+      static_cast<ExtraWordDelimiters>(std::to_underlying(settingsTable->extra_word_delimiters()));
 
   if (settingsTable->unknown_character_fallback_as_ByteFallback() != nullptr)
     settings.unknownCharacterFallback = ByteFallback{};
@@ -1015,7 +1087,21 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
     }
   }
 
-  const size_t tokenCount = symbols.size() + markupTokenToTokenId.size();
+  std::vector<DecodeOnlyToken> decodeOnlyTokens;
+  if (model->decode_only_tokens() != nullptr) {
+    for (const schema::DecodeOnlyToken* decodeOnlyToken : *model->decode_only_tokens()) {
+      if (decodeOnlyToken->symbol_id() >= symbols.size())
+        throw std::invalid_argument(
+            "the tokenizer file has a decode-only token without a valid symbol"
+        );
+
+      decodeOnlyTokens.push_back(
+          {.tokenId = decodeOnlyToken->token_id(), .symbolId = decodeOnlyToken->symbol_id()}
+      );
+    }
+  }
+
+  const size_t tokenCount = symbols.size() + markupTokenToTokenId.size() + decodeOnlyTokens.size();
   std::vector<bool> areTokenIdsUsed(tokenCount, false);
   // TODO: refactor to allow token ids outside of [0, token count] range
   const auto checkIsTokenIdUsed = [&](uint32_t tokenId) {
@@ -1029,6 +1115,9 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
     checkIsTokenIdUsed(tokenId);
 
   for (const auto& [_, tokenId] : markupTokenToTokenId)
+    checkIsTokenIdUsed(tokenId);
+
+  for (const auto [tokenId, _] : decodeOnlyTokens)
     checkIsTokenIdUsed(tokenId);
 
   settings = getValidatedSettings(std::move(settings));
@@ -1054,7 +1143,8 @@ BytePairEncoding BytePairEncoding::fromBytes(std::span<const std::byte> bytes) {
       std::move(symbols),
       std::move(pairKeyToMergedSymbolId),
       std::move(markupTokenToTokenId),
-      std::vector<uint32_t>(symbolIdToTokenId.begin(), symbolIdToTokenId.end())
+      std::vector<uint32_t>(symbolIdToTokenId.begin(), symbolIdToTokenId.end()),
+      std::move(decodeOnlyTokens)
   );
 }
 

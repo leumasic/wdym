@@ -90,6 +90,17 @@ T fromJs(const Napi::Value& value, const std::string& name) {
     if (!value.IsString())
       throw Napi::TypeError::New(env, name + " must be a string");
     return value.As<Napi::String>().Utf8Value();
+  } else if constexpr (std::is_enum_v<T>) {
+    std::vector<std::string_view> enumeratorNames;
+
+    template for (constexpr auto enumerator : getEnumerators(^^T)) {
+      if (value.IsString() && value.As<Napi::String>().Utf8Value() == getIdentifier(enumerator))
+        return [:enumerator:];
+
+      enumeratorNames.push_back(getIdentifier(enumerator));
+    }
+
+    throw Napi::TypeError::New(env, std::format("{} must be one of {}", name, enumeratorNames));
   } else if constexpr (isTemplateSpecializationOf(^^T, ^^std::vector)) {
     if (!value.IsArray())
       throw Napi::TypeError::New(env, name + " must be an array");
@@ -167,30 +178,38 @@ class JsTokenizer : public Napi::ObjectWrap<JsTokenizer<T>> {
   using DecodeOptions = T::DecodeOptions;
 
   static Napi::Function defineClass(Napi::Env env) {
-    return JsTokenizer::DefineClass(
-        env,
-        getIdentifier(^^T),
-        {
-            JsTokenizer::template StaticMethod<&JsTokenizer::train>("train"),
-            JsTokenizer::template StaticMethod<&JsTokenizer::load>("load"),
-            JsTokenizer::template StaticMethod<&JsTokenizer::fromBytes>("fromBytes"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::save>("save"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::toBytes>("toBytes"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::normalize>("normalize"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::encode>("encode"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::decode>("decode"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::tokenToId>("tokenToId"),
-            JsTokenizer::template InstanceMethod<&JsTokenizer::markupTokenToId>(
-                "markupTokenToId"
-            ),
-        }
-    );
+    std::vector<typename JsTokenizer::PropertyDescriptor> properties = {
+        JsTokenizer::template StaticMethod<&JsTokenizer::train>("train"),
+        JsTokenizer::template StaticMethod<&JsTokenizer::load>("load"),
+        JsTokenizer::template StaticMethod<&JsTokenizer::fromBytes>("fromBytes"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::save>("save"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::toBytes>("toBytes"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::normalize>("normalize"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::encode>("encode"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::decode>("decode"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::tokenToId>("tokenToId"),
+        JsTokenizer::template InstanceMethod<&JsTokenizer::markupTokenToId>("markupTokenToId"),
+    };
+
+    if constexpr (HAS_SENTENCEPIECE_LOADERS) {
+      properties.push_back(
+          JsTokenizer::template StaticMethod<&JsTokenizer::loadSentencePiece>("loadSentencePiece")
+      );
+      properties.push_back(
+          JsTokenizer::template StaticMethod<&JsTokenizer::fromSentencePiece>("fromSentencePiece")
+      );
+    }
+
+    return JsTokenizer::DefineClass(env, getIdentifier(^^T), properties);
   }
 
   explicit JsTokenizer(const Napi::CallbackInfo& info)
       : Napi::ObjectWrap<JsTokenizer>(info), tokenizer_(std::move(getTokenizerArgument(info))) {}
 
  private:
+  static constexpr bool HAS_SENTENCEPIECE_LOADERS =
+      requires(const fs::path& path) { T::loadSentencePiece(path); };
+
   class TrainWorker : public Napi::AsyncWorker {
    public:
     TrainWorker(Napi::Env env, std::function<T()> trainTokenizer)
@@ -273,6 +292,18 @@ class JsTokenizer : public Napi::ObjectWrap<JsTokenizer<T>> {
 
   static Napi::Value fromBytes(const Napi::CallbackInfo& info) {
     return create(info.Env(), T::fromBytes(bytesFromJs(info[0], "bytes")));
+  }
+
+  static Napi::Value loadSentencePiece(const Napi::CallbackInfo& info)
+    requires HAS_SENTENCEPIECE_LOADERS
+  {
+    return create(info.Env(), T::loadSentencePiece(fromJs<std::string>(info[0], "path")));
+  }
+
+  static Napi::Value fromSentencePiece(const Napi::CallbackInfo& info)
+    requires HAS_SENTENCEPIECE_LOADERS
+  {
+    return create(info.Env(), T::fromSentencePiece(bytesFromJs(info[0], "bytes")));
   }
 
   void save(const Napi::CallbackInfo& info) {

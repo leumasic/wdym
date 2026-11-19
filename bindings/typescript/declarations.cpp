@@ -27,6 +27,8 @@ class TypeScriptDeclarations {
       return "number";
     else if constexpr (std::same_as<T, std::string>)
       return "string";
+    else if constexpr (std::is_enum_v<T>)
+      return getEnumType<T>();
     else if constexpr (isTemplateSpecializationOf(^^T, ^^std::vector))
       return isTemplateSpecializationOf(^^typename T::value_type, ^^std::variant)
                  ? std::format("({})[]", getType<typename T::value_type>())
@@ -61,6 +63,14 @@ class TypeScriptDeclarations {
     const std::string settingsType = getType<typename T::Settings>();
     const std::string normalizationType = getType<wdym::NormalizationSettings>();
     const std::string decodeOptionsType = getType<typename T::DecodeOptions>();
+    const std::string sentencePieceLoaderDeclarations =
+        requires(const std::filesystem::path& path) { T::loadSentencePiece(path); }
+            ? std::format(
+                  "  static loadSentencePiece(path: string): {0};\n"
+                  "  static fromSentencePiece(bytes: Uint8Array): {0};\n",
+                  name
+              )
+            : "";
 
     return std::format(
         R"(export type {0}TrainArguments = TrainInput & {{
@@ -74,7 +84,7 @@ export class {0} {{
   static train(options: {0}TrainArguments): Promise<{0}>;
   static load(path: string): {0};
   static fromBytes(bytes: Uint8Array): {0};
-
+{5}
   save(path: string): void;
   toBytes(): Uint8Array;
   normalize(text: string): string;
@@ -88,7 +98,8 @@ export class {0} {{
         trainOptionFieldDeclarations,
         settingsType,
         normalizationType,
-        decodeOptionsType
+        decodeOptionsType,
+        sentencePieceLoaderDeclarations
     );
   }
 
@@ -123,6 +134,18 @@ export class {0} {{
     }
 
     return alternativeTypes |
+           std::views::join_with(std::string_view(" | ")) |
+           std::ranges::to<std::string>();
+  }
+
+  template <typename Enum>
+  std::string getEnumType() {
+    std::vector<std::string> enumeratorTypes;
+
+    template for (constexpr auto enumerator : getEnumerators(^^Enum))
+      enumeratorTypes.push_back(std::format("\"{}\"", getIdentifier(enumerator)));
+
+    return enumeratorTypes |
            std::views::join_with(std::string_view(" | ")) |
            std::ranges::to<std::string>();
   }

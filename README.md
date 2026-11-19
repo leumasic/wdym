@@ -106,6 +106,7 @@ For a ready-made environment, the `.dev` folder has a container image with these
 - [ ] Built-in normalization rules, such as NFKC and case folding
 - [ ] Parallel encoding of batches of texts
 - [ ] Looking up a token's text from its ID
+- [ ] Compatibility layer for using same-algorithm tokenizers produced by other libraries
 
 ### Bindings
 

@@ -10,6 +10,12 @@ union UnknownCharacterFallback {
   MarkupTokenFallback: string
 }
 
+enum ExtraWordDelimiters : ubyte {
+  Drop,
+  PrefixNextWord,
+  SuffixPreviousWord
+}
+
 table BytePairEncodingSettings {
   word_delimiter: string;
   word_prefix: string;
@@ -17,6 +23,12 @@ table BytePairEncodingSettings {
   adjoin_prefix: bool;
   adjoin_suffix: bool;
   unknown_character_fallback: UnknownCharacterFallback;
+  extra_word_delimiters: ExtraWordDelimiters;
+}
+
+struct DecodeOnlyToken {
+  token_id: uint32;
+  symbol_id: uint32;
 }
 
 struct Merge {
@@ -41,4 +53,6 @@ table BytePairEncoding {
   // Stored here instead of (redundantly) in BytePairEncodingSettings because
   // token ids tied to the tokenizer only come after building it
   markup_tokens: [MarkupToken];
+
+  decode_only_tokens: [DecodeOnlyToken];
 }

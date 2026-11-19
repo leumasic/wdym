@@ -31,6 +31,25 @@ consteval std::string toSnakeCase(std::string_view name) {
   return snakeCaseName;
 }
 
+consteval std::string toUpperSnakeCase(std::string_view name) {
+  std::string upperSnakeCaseName;
+
+  for (const char character : name) {
+    if (character >= 'A' && character <= 'Z' && !upperSnakeCaseName.empty())
+      upperSnakeCaseName.push_back('_');
+
+    upperSnakeCaseName.push_back(
+        character >= 'a' && character <= 'z' ? static_cast<char>(character - 'a' + 'A') : character
+    );
+  }
+
+  return upperSnakeCaseName;
+}
+
+consteval const char* getPythonEnumeratorName(std::meta::info enumerator) {
+  return std::define_static_string(toUpperSnakeCase(std::meta::identifier_of(enumerator)));
+}
+
 consteval const char* getPythonFieldName(std::meta::info field) {
   return std::define_static_string(toSnakeCase(std::meta::identifier_of(field)));
 }
@@ -100,6 +119,15 @@ void bindStruct(nb::module_& m) {
   }
 
   cls.def(nb::self == nb::self);
+}
+
+template <typename T>
+  requires std::is_enum_v<T>
+void bindEnum(nb::module_& m) {
+  nb::enum_<T> enumeration(m, getIdentifier(^^T));
+
+  template for (constexpr auto enumerator : getEnumerators(^^T))
+    enumeration.value(getPythonEnumeratorName(enumerator), [:enumerator:]);
 }
 
 class GilSafeObject {
@@ -216,6 +244,18 @@ void bindTokenizer(nb::module_& m) {
   nb::class_<T> cls(m, getIdentifier(^^T));
   bindTrain(cls);
 
+  if constexpr (requires(const fs::path& path) { T::loadSentencePiece(path); })
+    cls.def_static("load_sentencepiece", &T::loadSentencePiece, "path"_a)
+        .def_static(
+            "from_sentencepiece",
+            [](const nb::bytes& data) {
+              return T::fromSentencePiece(
+                  std::span(static_cast<const std::byte*>(data.data()), data.size())
+              );
+            },
+            "data"_a
+        );
+
   cls.def_static("load", &T::load, "path"_a)
       .def("save", &T::save, "path"_a)
       .def_static(
@@ -292,6 +332,7 @@ NB_MODULE(wdym_ext, m) {
   bindStruct<wdym::NormalizationSettings>(m);
   bindStruct<wdym::MarkupToken>(m);
   bindStruct<wdym::ByteFallback>(m);
+  bindEnum<wdym::ExtraWordDelimiters>(m);
   bindStruct<wdym::BytePairEncodingSettings>(m);
   bindStruct<wdym::BytePairEncodingDecodeOptions>(m);
 

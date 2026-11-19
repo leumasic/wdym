@@ -74,6 +74,7 @@ add_library(wdym STATIC
   src/normalization.cpp
   src/tokenizers/byte_level_bpe.cpp
   src/tokenizers/bpe.cpp
+  src/compatibility/sentencepiece_bpe.cpp
   ${WDYM_GENERATED_HEADERS}
 )
 add_library(wdym::wdym ALIAS wdym)
@@ -92,7 +93,8 @@ target_sources(wdym PUBLIC
     src/tokenizers/byte_level_bpe.cppm)
 target_sources(wdym PRIVATE
   FILE_SET private_modules TYPE CXX_MODULES BASE_DIRS ${PROJECT_SOURCE_DIR}/src FILES
-    src/tokenizer_file.cppm)
+    src/tokenizer_file.cppm
+    src/compatibility/sentencepiece_model.cppm)
 target_compile_features(wdym PUBLIC cxx_std_26)
 target_compile_options(wdym PRIVATE -Wall -Wextra)
 # BUILD_INTERFACE keeps this header-only dependency out of the installed wdymTargets export

@@ -15,6 +15,13 @@ struct TokenSource {
   bool isMarkupToken = false;
   uint32_t index = 0;
 };
+
+struct DecodeOnlyToken {
+  uint32_t tokenId = 0;
+  uint32_t symbolId = 0;
+
+  bool operator==(const DecodeOnlyToken&) const = default;
+};
 }  // namespace wdym
 
 export namespace wdym {
@@ -22,10 +29,17 @@ struct ByteFallback {
   bool operator==(const ByteFallback&) const = default;
 };
 
+enum class ExtraWordDelimiters : uint8_t {
+  Drop,
+  PrefixNextWord,
+  SuffixPreviousWord,
+};
+
 struct BytePairEncodingSettings {
   std::vector<std::string> markupTokens = {};
 
   std::string wordDelimiter = " ";
+  ExtraWordDelimiters extraWordDelimiters = ExtraWordDelimiters::Drop;
 
   // Prepended or adjoined to the start of each word
   std::string wordPrefix = "▁";
@@ -118,6 +132,9 @@ class BytePairEncoding : public TokenizerBase<
   std::vector<std::byte> toBytes() const;
   static BytePairEncoding fromBytes(std::span<const std::byte> bytes);
 
+  static BytePairEncoding fromSentencePiece(std::span<const std::byte> bytes);
+  static BytePairEncoding loadSentencePiece(const std::filesystem::path& path);
+
   std::vector<uint32_t> encode(std::string_view text) const;
   void encode(
       std::string_view text,
@@ -162,7 +179,8 @@ class BytePairEncoding : public TokenizerBase<
            symbols_.values() == other.symbols_.values() &&
            pairKeyToMergedSymbolId_.values() == other.pairKeyToMergedSymbolId_.values() &&
            markupTokenToTokenId_.values() == other.markupTokenToTokenId_.values() &&
-           symbolIdToTokenId_ == other.symbolIdToTokenId_;
+           symbolIdToTokenId_ == other.symbolIdToTokenId_ &&
+           decodeOnlyTokens_ == other.decodeOnlyTokens_;
   }
 
   std::vector<std::pair<std::string, std::string>> merges() const;
@@ -174,7 +192,8 @@ class BytePairEncoding : public TokenizerBase<
       StringKeySet symbols,
       ankerl::unordered_dense::map<uint64_t, uint32_t> pairKeyToMergedSymbolId,
       StringKeyMap<uint32_t> markupTokenToTokenId,
-      std::vector<uint32_t> symbolIdToTokenId
+      std::vector<uint32_t> symbolIdToTokenId,
+      std::vector<DecodeOnlyToken> decodeOnlyTokens = {}
   );
 
   static BytePairEncoding trainFromTexts(
@@ -207,6 +226,7 @@ class BytePairEncoding : public TokenizerBase<
 
   const StringKeyMap<uint32_t> markupTokenToTokenId_;
   const std::vector<uint32_t> symbolIdToTokenId_;
+  const std::vector<DecodeOnlyToken> decodeOnlyTokens_;
 
   // For decoding
   const std::vector<TokenSource> tokenIdToTokenSource_;

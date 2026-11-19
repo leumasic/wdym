@@ -96,7 +96,7 @@ TEST_CASE("markup tokens encode and decode as single tokens", "[bpe]") {
   REQUIRE(tokenIds.front() == *startTokenId);
   REQUIRE(tokenIds.back() == tokenizer.markupTokenToId("</s>"));
   const std::vector<wdym::TextOrMarkupToken> expectedParts = {
-      "<s>"_markup, " the lazy dog", "</s>"_markup
+      "<s>"_markup, "the lazy dog", "</s>"_markup
   };
   REQUIRE(tokenizer.decodeParts(tokenIds) == expectedParts);
 }

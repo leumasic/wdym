@@ -13,6 +13,10 @@ export {
     );
   }
 
+  consteval auto getEnumerators(std::meta::info type) {
+    return std::define_static_array(std::meta::enumerators_of(type));
+  }
+
   consteval bool isTemplateSpecializationOf(std::meta::info type, std::meta::info typeTemplate) {
     type = std::meta::dealias(type);
     return std::meta::has_template_arguments(type) && std::meta::template_of(type) == typeTemplate;

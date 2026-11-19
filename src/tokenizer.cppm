@@ -110,6 +110,16 @@ class TokenizerBase {
   }
 
   static Derived load(const std::filesystem::path& path) {
+    return Derived::fromBytes(readTokenizerFile(path));
+  }
+
+  std::string normalize(std::string_view text) const {
+    std::string normalizationBuffer;
+    return std::string(normalizer_.normalize(text, normalizationBuffer));
+  }
+
+ protected:
+  static std::vector<std::byte> readTokenizerFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file)
       throw std::filesystem::filesystem_error(
@@ -124,15 +134,9 @@ class TokenizerBase {
           "could not read tokenizer file", path, std::error_code(errno, std::generic_category())
       );
 
-    return Derived::fromBytes(bytes);
+    return bytes;
   }
 
-  std::string normalize(std::string_view text) const {
-    std::string normalizationBuffer;
-    return std::string(normalizer_.normalize(text, normalizationBuffer));
-  }
-
- protected:
   const Normalizer normalizer_;
 
  private:
